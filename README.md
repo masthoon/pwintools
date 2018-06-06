@@ -4,14 +4,11 @@ PWiNTOOLS is a very basic implementation of [pwntools][PWNTOOLS] for Windows to 
 
 Windows is not yet supported in the official [pwntools][PWNTOOLS]: [Minimal support for Windows #996](https://github.com/Gallopsled/pwntools/pull/996).
 
-Feel free to contribute or reports bugs.
+Feel free to contribute or report bugs.
 
 # Usage / Documentation
 
 Read the [code][CODE] :)
-
-The [tests][EXAMPLE] provides some examples of usage.
-
 
 ```python
 from pwintools import *
@@ -34,6 +31,11 @@ else:
 log.info('Starting interactive mode ...')
 r.interactive() # interactive2 for Remote available
 ```
+
+The [test][EXAMPLE] provides some examples of usage:
+- test_process spawns pwn.exe and exploit it (pwn.exe can be build using `tests/build_pwn_pe.py` requires [LIEF][LIEF])
+- test_remote is a basic TCP connection
+- run_shellcodeX injects shellcode X into notepad.exe to test it locally
 
 # Deps
 
@@ -61,3 +63,4 @@ Optionals:
 [CAPSTONE]: https://www.capstone-engine.org/
 [KEYSTONE]: https://www.keystone-engine.org/
 [EXAMPLE]: https://github.com/masthoon/pwintools/tree/master/tests
+[LIEF]: https://github.com/lief-project/LIEF
