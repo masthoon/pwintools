@@ -651,16 +651,6 @@ class Process(windows.winobject.process.WinProcess):
                 if imp.name == func_name:
                     return imp.addr
         return 0
-
-    def get_import(self, dll_name, func_name):
-        if not self.check_initialized():
-            return 0
-        pe = self.peb.modules[0].pe
-        if dll_name in pe.imports:
-            for imp in pe.imports[dll_name]:
-                if imp.name == func_name:
-                    return imp.addr
-        return 0
         
     def get_remote_func_addr(self, dll_name, func_name):
         if not self.check_initialized():
