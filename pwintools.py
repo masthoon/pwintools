@@ -663,10 +663,12 @@ class Process(windows.winobject.process.WinProcess):
             return 0
         return mod.pe.exports[func_name]
         
-    def libs(self):
+    def libs(self,fullname=False):
         if not self.check_initialized():
             return 0
-        return {mod.fullname: mod.baseaddr for mod in self.peb.modules}
+        if fullname:
+            return {mod.fullname: mod.baseaddr for mod in self.peb.modules}
+        return {mod.name: mod.baseaddr for mod in self.peb.modules}
     
     def close(self):
         if not self.is_exit:
