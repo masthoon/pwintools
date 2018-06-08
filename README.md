@@ -32,10 +32,12 @@ log.info('Starting interactive mode ...')
 r.interactive() # interactive2 for Remote available
 ```
 
-The [test][EXAMPLE] provides some examples of usage:
-- test_process spawns pwn.exe and exploit it (pwn.exe can be build using `tests/build_pwn_pe.py` requires [LIEF][LIEF])
-- test_remote is a basic TCP connection
-- run_shellcodeX injects shellcode X into notepad.exe to test it locally
+The [test][EXAMPLE] directory provides some examples of usage:
+- test_pwn_pe spawns pwn.exe and exploits it (pwn.exe can be build using `tests/build_pwn_pe.py` requires [LIEF][LIEF])
+- test_remote is a basic TCP connection and interaction
+- test_shellcode injects shellcodes into notepad.exe to test them locally
+- exemple_rop is a example of exploit script for the associated vulnerable exemple_rop
+
 
 # Deps
 
@@ -48,14 +50,23 @@ Optionals:
 # TODO
 
 ```
+Before release:
+- Change util function name from "get_remote_funct_addr" to a dict: proc.imports / proc.symbols / proc.libs
+
 	Improve 32 bits support and testing
 	Support local Context like pwntools
 	Improve Shellcraft to avoid NULL bytes (xor_pair)
 	Provide examples with Python Debugger
 	Integrate gadgets tool support (rp++)
 	Process mitigation (appcontainer / Force ASLR rebase / Job sandboxing ...)
+	pip install pwintools :)
 	`Port` the project to pwntools
 ```
+
+# Acknowledgements
+
+* Mastho
+* Geluchat
 
 [CODE]: https://github.com/masthoon/pwintools/blob/master/pwintools.py
 [PWNTOOLS]: https://github.com/Gallopsled/pwntools

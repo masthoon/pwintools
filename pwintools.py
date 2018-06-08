@@ -223,6 +223,17 @@ _msgtype_prefixes = {
     'exception'    : 'ERROR',
     'critical'     : 'CRITICAL'
 }
+class DuplicateFilter(object):
+    def __init__(self):
+        self.msgs = set()
+
+    def filter(self, record):
+        # Only filter `EOFError:`
+        rv = True
+        if record.msg and "EOFError:" in record.msg:
+            rv = record.msg not in self.msgs
+            self.msgs.add(record.msg)
+        return rv
 
 class MiniLogger(object):
     """Python simple logger implementation"""
@@ -232,6 +243,7 @@ class MiniLogger(object):
         formatter = logging.Formatter('%(message)s')
         streamHandler.setFormatter(formatter)
         self.logger.addHandler(streamHandler)
+        self.logger.addFilter(DuplicateFilter())
         self.log_level = 'info'
         
     def get_log_level(self):
@@ -552,7 +564,7 @@ class Process(windows.winobject.process.WinProcess):
             if raise_exc:
                 raise(EOFError("Process {:s} exited".format(self)))
             else:
-                log.warning("Process {:s} exited".format(self))
+                log.warning("EOFError: Process {:s} exited".format(self))
     
     def check_closed(self):
         self.check_exit(True)
