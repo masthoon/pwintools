@@ -1,7 +1,7 @@
 from setuptools import setup
 
 PKG_NAME = "PWiNTOOLS"
-VERSION  = "0.2"
+VERSION  = "0.3"
 
 
 setup(
