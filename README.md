@@ -16,8 +16,8 @@ from pwintools import *
 DEBUG = True
 if DEBUG:
 	r = Process("chall.exe") # Spawn chall.exe process
-	r.spawndebugger(breakin=False)
-	log.info("Shellcode should be calling WinExec at 0x{:x}".format(r.get_remote_func_addr('kernel32.dll', 'WinExec')))
+	r.spawn_debugger(breakin=False)
+	log.info("WinExec @ 0x{:x}".format(r.symbols['kernel32.dll']['WinExec']))
 else:
 	r = Remote("challenge.remote.service", 8080)
 
@@ -33,10 +33,10 @@ r.interactive() # interactive2 for Remote available
 ```
 
 The [test][EXAMPLE] directory provides some examples of usage:
-- test_pwn_pe spawns pwn.exe and exploits it (pwn.exe can be build using `tests/build_pwn_pe.py` requires [LIEF][LIEF])
-- test_remote is a basic TCP connection and interaction
-- test_shellcode injects shellcodes into notepad.exe to test them locally
-- exemple_rop is a example of exploit script for the associated vulnerable exemple_rop
+- *test_pwn_pe* spawns pwn.exe and exploits it (pwn.exe can be build using `tests/build_pwn_pe.py` requires [LIEF][LIEF])
+- *test_remote* is a basic TCP connection and interaction
+- *test_shellcode* injects shellcodes into notepad.exe to test them locally
+- *exemple_rop* is a example of exploit script for the associated vulnerable exemple_rop
 
 
 # Deps
@@ -50,9 +50,6 @@ Optionals:
 # TODO
 
 ```
-Before release:
-- Change util function name from "get_remote_funct_addr" to a dict: proc.imports / proc.symbols / proc.libs
-
 	Improve 32 bits support and testing
 	Support local Context like pwntools
 	Improve Shellcraft to avoid NULL bytes (xor_pair)

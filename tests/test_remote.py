@@ -5,11 +5,12 @@ from pwintools import *
 
 # Connect TCP 127.0.0.1:8888
 r = Remote('127.0.0.1', 8888)
-print(r)
+log.info(r)
 # Send 'TEST' and waits for 'quit'
 r.sendline('TEST')
 buf = ''
 while buf != 'quit\n':
     buf = r.recvall()
-    print(buf)
+    if buf:
+        log.info(buf)
 r.interactive()

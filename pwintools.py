@@ -22,6 +22,7 @@ import windows.native_exec.simple_x64 as x64
 try:
     import capstone
     def disasm(data, bitness = 64, vma = 0):
+        """disasm(data, bitness = 64, vma = 0) dissas the data at vma"""
         cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if bitness == 64 else capstone.CS_MODE_32)
         dis = ''
         for i in cs.disasm(data, vma):
@@ -34,6 +35,7 @@ except ImportError:
 try:
     import keystone
     def asm(code, bitness = 64, vma = 0):
+        """asm(code, bitness = 64, vma = 0) assembles the assembly code at vma"""
         ks = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_64 if bitness == 64 else keystone.KS_MODE_32)
         encoding, count = ks.asm(code, vma)
         return encoding
@@ -349,6 +351,7 @@ class Pipe(object):
         self.tick = 40 # ms
         
     def get_handle(self, mode = 'r'):
+        """get_handle(mode = 'r') returns the 'r'ead / 'w'rite HANDLE of the pipe"""
         if mode and mode[0] == 'w':
             return self._wpipe
         return self._rpipe
@@ -358,6 +361,7 @@ class Pipe(object):
         windows.winproxy.CloseHandle(self._wpipe)
     
     def select(self):
+        """select() returns the number of bytes available to read on the pipe"""
         return PeekNamedPipe(self._rpipe)
         
     def _read(self, size):
@@ -368,6 +372,7 @@ class Pipe(object):
         return buffer.raw
         
     def read(self, size):
+        """read(size) returns the bytes read on the pipe (returned length <= size)"""
         if self.select() < size:
             elapsed = 0
             while elapsed <= self.timeout and self.select() < size:
@@ -376,6 +381,7 @@ class Pipe(object):
         return self._read(min(self.select(), size))
     
     def write(self, buffer):
+        """write(buffer) sends the buffer on the pipe"""
         windows.winproxy.WriteFile(self._wpipe, buffer)
 
 class Remote(object):
@@ -402,6 +408,7 @@ class Remote(object):
         return '<{0} "{1}:{2}" at {3}>'.format(self.__class__.__name__, self.ip, self.port, hex(id(self)))
     
     def close(self):
+        """close() closes the connection"""
         self.sock.close()
         self._closed = True
         
@@ -423,8 +430,10 @@ class Remote(object):
             self.timeout = self._default_timeout
             
     timeout = property(get_timeout, set_timeout)
+    """timeout in ms for read on the socket"""
     
     def read(self, n, timeout = None, no_warning = False):
+        """read(n, timeout = None, no_warning = False) tries to read n bytes on the socket before timeout"""
         self.timeout = timeout
         buf = ''
         if not self.check_closed(False):
@@ -440,6 +449,7 @@ class Remote(object):
         return buf
     
     def write(self, buf):
+        """write(buf) sends the buf to the socket"""
         if not self.check_closed(True):
             try:
                 return self.sock.send(buf)
@@ -448,37 +458,45 @@ class Remote(object):
                 log.warning("EOFError: Socket {:s} closed".format(self))
             
     def send(self, buf):
+        """send(buf) sends the buf to the socket"""
         self.write(buf)
         
     def sendline(self, line):
+        """sendline(line) sends the line adding newline to the socket"""
         self.write(line + self.newline)
         
     def recv(self, n, timeout = None):
+        """recv(n, timeout = None) tries to read n bytes on the socket before timeout"""
         return self.read(n, timeout)
     
     def recvn(self, n, timeout = None):
+        """recvn(n, timeout = None) reads exactly n bytes on the socket before timeout"""
         buf = self.read(n, timeout)
         if len(buf) != n:
             raise(EOFError("Timeout {:s} - Incomplete read".format(self)))
         return buf
     
     def recvall(self, force_exception = False, timeout = None):
+        """recvall(force_exception = False, timeout = None) reads all bytes available on the socket before timeout"""
         return self.read(0x100000, timeout, no_warning = True)
         
     def recvuntil(self, delim, timeout = None):
+        """recvuntil(delim, timeout = None) reads bytes until the delim is present on the socket before timeout"""
         buf = ''
         while delim not in buf:
             buf += self.recvn(1, timeout)
         return buf
         
     def recvline(self, timeout = None):
+        """recvline(timeout = None) reads one line on the socket before timeout"""
         return self.recvuntil(self.newline, timeout)
             
     def interactive(self, escape = False):
+        """interactive(escape = None) allows to interact directly with the socket (escape to show binary content received)"""
         interact(self, escape)
         
     def interactive2(self):
-        """Interact with telnetlib"""
+        """interactive2() with telnetlib"""
         fs = self.sock._sock
         import telnetlib
         t = telnetlib.Telnet()
@@ -528,6 +546,7 @@ class Process(windows.winobject.process.WinProcess):
             time.sleep(0.05)
                 
     def __del__(self):
+        # TODO: Kill the debugger too
         if self.__pid and not self.is_exit:
             self.exit(0)
     
@@ -584,8 +603,10 @@ class Process(windows.winobject.process.WinProcess):
             self.timeout = self._default_timeout
 
     timeout = property(get_timeout, set_timeout)
+    """timeout in ms for read on the process stdout (pipe)"""
     
     def read(self, n, timeout = None, no_warning = False):
+        """read(n, timeout = None, no_warning = False) tries to read n bytes on process stdout before timeout"""
         self.timeout = timeout
         buf = ''
         if self.stdhandles and not self.check_exit():
@@ -595,40 +616,50 @@ class Process(windows.winobject.process.WinProcess):
         return buf
     
     def write(self, buf):
+        """write(buf) sends the buf to the process stdin"""
         if self.stdhandles and not self.check_exit(True):
             return self.stdin.write(buf)
             
     def send(self, buf):
+        """send(buf) sends the buf to the process stdin"""
         self.write(buf)
         
     def sendline(self, line):
+        """sendline(line) sends the line adding newline to the process stdin"""
         self.write(line + self.newline)
         
     def recv(self, n, timeout = None):
+        """recv(n, timeout = None) tries to read n bytes on the process stdout before timeout"""
         return self.read(n, timeout)
     
     def recvn(self, n, timeout = None):
+        """recvn(n, timeout = None) reads exactly n bytes on the process stdout before timeout"""
         buf = self.read(n, timeout)
         if len(buf) != n:
             raise(EOFError("Timeout {:s} - Incomplete read".format(self)))
         return buf
     
     def recvall(self, force_exception = False, timeout = None):
+        """recvall(force_exception = False, timeout = None) reads all bytes available on the process stdout before timeout"""
         return self.read(0x100000, timeout, no_warning = True)
         
     def recvuntil(self, delim, timeout = None):
+        """recvuntil(delim, timeout = None) reads bytes until the delim is present on the process stdout before timeout"""
         buf = ''
         while delim not in buf:
             buf += self.recvn(1, timeout)
         return buf
         
     def recvline(self, timeout = None):
+        """recvline(timeout = None) reads one line on the process stdout before timeout"""
         return self.recvuntil(self.newline, timeout)
             
     def interactive(self, escape = False):
+        """interactive(escape = None) allows to interact directly with the socket (escape to show binary content received)"""
         interact(self, escape)
 
     def leak(self, addr, count = 1):
+        """leak(addr, count = 1) reads count bytes of the process memory at addr"""
         if not self.check_initialized():
             return ''
         try:
@@ -637,12 +668,15 @@ class Process(windows.winobject.process.WinProcess):
             log.warning("{}: {:s} {}".format(e.__class__.__name__, self, str(e)))
             return ''
 
-    def search_memory(self, pattern):
+    def search(self, pattern, writable = False):
+        """search(pattern, writable = False) search pattern in all loaded modules (EXE + DLL) ; returns the addr (0 on error)"""
         if not self.check_initialized():
             return 0
         for module in self.peb.modules:
             try:
                 for section in module.pe.sections:
+                    if writable and section.Characteristics & gdef.IMAGE_SCN_MEM_WRITE == 0:
+                        continue
                     for page in xrange(section.start, section.start + section.size, 0x1000):
                         try:
                             pos = self.read_memory(page, min(0x1000, (section.start + section.size) - page)).find(pattern)
@@ -653,49 +687,73 @@ class Process(windows.winobject.process.WinProcess):
             except:
                 pass
         return 0
-        
-    def get_import(self, dll_name, func_name):
+    
+    @property
+    def imports(self):
+        """imports returns a dict of main EXE imports like {'ntdll.dll': {'Sleep': <IATEntry type - .addr .value>, ...}, ...}"""
+        if not self.check_initialized():
+            return {}
+        pe = self.peb.modules[0].pe
+        # TODO: cache imports
+        return {dll.lower(): {imp.name: imp for imp in imps} for dll, imps in pe.imports.items() if dll}
+    
+    
+    def get_import(self, dll, function):
+        """get_import(self, dll, function) returns the address of the import dll!function"""
         if not self.check_initialized():
             return 0
         pe = self.peb.modules[0].pe
-        if dll_name in pe.imports:
-            for imp in pe.imports[dll_name]:
-                if imp.name == func_name:
+        if dll in pe.imports:
+            for imp in pe.imports[dll]:
+                if imp.name == function:
                     return imp.addr
         return 0
         
-    def get_remote_func_addr(self, dll_name, func_name):
+    @property
+    def symbols(self):
+        """symbols returns a dict of the process exports (all DLL) like {'ntdll.dll': {'Sleep': addr, 213: addr, ...}, ...}"""
         if not self.check_initialized():
+            return {}
+        # TODO: cache symbols
+        return {module.pe.export_name.lower(): module.pe.exports for module in self.peb.modules if module.pe.export_name}
+    
+    
+    def get_proc_address(self, dll, function):
+        """get_proc_address(self, dll, function) returns the address of the dll!function"""
+        modules = [m for m in self.peb.modules if m.name == dll]
+        if not len(modules):
             return 0
-        name_modules = [m for m in self.peb.modules if m.name == dll_name]
-        if not len(name_modules):
+        module = modules[0]
+        if not function in module.pe.exports:
             return 0
-        mod = name_modules[0]
-        if not func_name in mod.pe.exports:
-            return 0
-        return mod.pe.exports[func_name]
-        
-    def libs(self,fullname=False):
+        return module.pe.exports[function]
+    
+    @property
+    def libs(self):
+        """libs returns a dict of loaded modules with their baseaddr like {'ntdll.dll': 0x123456000, ...}"""
         if not self.check_initialized():
-            return 0
-        if fullname:
-            return {mod.fullname: mod.baseaddr for mod in self.peb.modules}
-        return {mod.name: mod.baseaddr for mod in self.peb.modules}
+            return {}
+        return {module.name.lower(): module.baseaddr for module in self.peb.modules if module.name}
+    
     
     def close(self):
+        """close() closes the process"""
         if not self.is_exit:
             self.exit(0)
         
-    def spawndebugger(self, breakin = True, cmd = None):
+    def spawn_debugger(self, breakin = True, dbg_cmd = None):
+        """spawn_debugger(breakin = True, dbg_cmd = None) spawns Windbg (self.debuggerpath) to debug the process"""
         cmd = [self.debuggerpath, '-p', str(self.pid)]
         if not breakin:
             cmd.append('-g')
-        if cmd!=None:
-            cmd.append('-c "%s"' % (cmd))	
+        if dbg_cmd:
+            cmd.append('-c')
+            cmd.append(dbg_cmd)
         self.debugger = Process(cmd, nostdhandles=True)
         # Give time to the debugger
         time.sleep(1)
 
+# TODO: Modify PythonForWindows assembly helpers to prevent NULL bytes in the shellcode
 # https://github.com/hakril/PythonForWindows/blob/master/windows/native_exec/nativeutils.py
 # https://github.com/hakril/PythonForWindows/blob/master/samples/native_utils.py
 
@@ -703,7 +761,7 @@ def sc_64_pushstr(s):
     if not s.endswith('\0'):
         s += '\0\0'
     PushStr_sc = x64.MultipleInstr()
-    # TODO Use xor_pair to avoid NULL
+    # TODO: Use xor_pair to avoid NULL
     for block in cut(s, 8)[::-1]:
         block += '\0' * (8 - len(block))
         PushStr_sc += x64.Mov("RAX", u64(block))
@@ -787,10 +845,19 @@ def sc_64_AllocRWX(address, rwx_qword):
 
 
 log = MiniLogger()
+"""log Python logger"""
 
 shellcraft = DotDict()
 shellcraft.amd64 = DotDict()
+
 shellcraft.amd64.pushstr = sc_64_pushstr
+"""shellcraft.amd64.pushstr(string) returns MultipleInstr objects pushing the string on the stack"""
+
 shellcraft.amd64.WinExec = sc_64_WinExec
+"""shellcraft.amd64.WinExec(string) returns str shellcode calling WinExec"""
+
 shellcraft.amd64.LoadLibrary = sc_64_LoadLibrary
+"""shellcraft.amd64.LoadLibrary(string) returns str shellcode calling LoadLibrary"""
+
 shellcraft.amd64.AllocRWX = sc_64_AllocRWX
+"""shellcraft.amd64.AllocRWX(addr, rwx_qword) returns str shellcode allocating rwx, writing rwx_qword and jumping on it"""

@@ -3,14 +3,17 @@ import os.path
 sys.path.append(os.path.abspath(__file__ + "\..\.."))
 from pwintools import *
 
+log.log_level = 'debug'
+
 def run_shellcode(sc, debug = False):
     if debug:
-        print(disasm(sc))
-        print(hexdump(sc))
+        log.debug(disasm(sc))
+        log.debug(hexdump(sc))
     import windows.test
     notepad = Process(r"C:\Windows\system32\notepad.exe", CREATE_SUSPENDED)
     if debug:
-        notepad.spawndebugger()
+        notepad.spawn_debugger()
+        log.info("Press 'g' in debugger!")
     notepad.execute(sc, notepad.virtual_alloc(0x1000))
     raw_input("Press enter to close shellcoded notepad")
     notepad.close()
