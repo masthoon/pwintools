@@ -1,7 +1,7 @@
 from setuptools import setup
 
 PKG_NAME = "PWiNTOOLS"
-VERSION  = "0.3"
+VERSION  = "0.31"
 
 
 setup(
@@ -16,6 +16,7 @@ setup(
     py_modules=['pwintools'],
     install_requires=[
         'PythonForWindows==0.4',
+        'pyserial==3.0.1', #for windows XP. Otherwise use the latest version 
     ],
     dependency_links=[
         'git+git://github.com/hakril/PythonForWindows@master#egg=PythonForWindows-0.4',
