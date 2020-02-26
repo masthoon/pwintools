@@ -522,13 +522,14 @@ class serialtube(serial.Serial):
             bytesize = bytesize,
             parity = parity,
             stopbits = stopbits,
-            timeout = 0,
+            timeout = 0.1,
             xonxoff = xonxoff,
             rtscts = rtscts,
             writeTimeout = None,
             dsrdtr = dsrdtr,
             interCharTimeout = 0
         )
+        #assert self.can_recv_raw()
 
 
     # not from original pwntools, 
@@ -539,15 +540,20 @@ class serialtube(serial.Serial):
             return True
         return False
     
-    def recvline(self):
+    def recvline(self, timeout=None):
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+    
         if not self.conn:
             raise EOFError
 
         buf = ""
-        while(not self.is_line(buf)):
-            time.sleep(0.1)
+        fin = False
+        while(not fin):
             buf = self.conn.readline()
-            
+            fin = self.is_line(buf)
+            if(not fin): time.sleep(timeout)
+        
         return buf
     
     def sendline(self, data, flush=True):
@@ -557,7 +563,12 @@ class serialtube(serial.Serial):
         if(flush): self.recvline()
 
     # Implementation of the methods required for tube
-    def recv_raw(self, numb):
+    def recv_raw(self, numb, timeout = None):
+    
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+
+    
         if not self.conn:
             raise EOFError
 
@@ -567,9 +578,23 @@ class serialtube(serial.Serial):
             if data:
                 return data
 
-            time.sleep(min(self.conn.timeout, 0.1))
+            time.sleep(timeout)
 
         return None
+
+    def recvn(self, n, timeout = None):
+        """recvn(n, timeout = None) reads exactly n bytes on the socket before timeout"""
+        buf = self.recv_raw(n, timeout)
+        if len(buf) != n:
+            raise(EOFError("Timeout {:s} - Incomplete read".format(self)))
+        return buf
+        
+    def recvuntil(self, delim, timeout = None):
+        """recvuntil(delim, timeout = None) reads bytes until the delim is present on the socket before timeout"""
+        buf = ''
+        while delim not in buf:
+            buf += self.recvn(1, timeout)
+        return buf
 
     def send_raw(self, data):
         if not self.conn:
@@ -586,12 +611,26 @@ class serialtube(serial.Serial):
     def settimeout_raw(self, timeout):
         pass
 
-    def can_recv_raw(self, timeout):
-        while self.conn:
+    def can_recv_raw(self, timeout=None):
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+    
+        if self.conn:
             if self.conn.inWaiting():
                 return True
-            time.sleep(min(self.timeout, 0.1))
+            else:
+                time.sleep(timeout)
+                return (self.conn.inWaiting() > 0)
         return False
+        
+    def recvall(self, timeout=None):
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+    
+        buf = ""
+        while(self.can_recv_raw(timeout)):
+            buf = buf + self.recvline()
+        return buf
 
     def connected_raw(self, direction):
         return self.conn != None
