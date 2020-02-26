@@ -554,7 +554,7 @@ class serialtube(serial.Serial):
         # flush means "remove from recvline"
         # how to remove from recvline? Do one recvline
         self.send_raw(data.encode()+b'\r\n')
-        self.recvline()
+        if(flush): self.recvline()
 
     # Implementation of the methods required for tube
     def recv_raw(self, numb):
