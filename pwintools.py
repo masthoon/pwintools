@@ -18,6 +18,7 @@ import windows.generated_def as gdef
 from windows.generated_def.winstructs import *
 import windows.native_exec.simple_x64 as x64
 
+import serial
 
 try:
     import capstone
@@ -534,14 +535,13 @@ class serialtube(serial.Serial):
         if not self.conn:
             raise EOFError
 
-        with self.countdown():
-            while self.conn and self.countdown_active():
-                data = self.conn.read(numb)
+        while self.conn:
+            data = self.conn.read(numb)
 
-                if data:
-                    return data
+            if data:
+                return data
 
-                time.sleep(min(self.timeout, 0.1))
+            time.sleep(min(self.conn.timeout, 0.1))
 
         return None
 
@@ -561,11 +561,10 @@ class serialtube(serial.Serial):
         pass
 
     def can_recv_raw(self, timeout):
-        with self.countdown(timeout):
-            while self.conn and self.countdown_active():
-                if self.conn.inWaiting():
-                    return True
-                time.sleep(min(self.timeout, 0.1))
+        while self.conn:
+            if self.conn.inWaiting():
+                return True
+            time.sleep(min(self.timeout, 0.1))
         return False
 
     def connected_raw(self, direction):
