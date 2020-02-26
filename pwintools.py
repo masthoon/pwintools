@@ -530,6 +530,32 @@ class serialtube(serial.Serial):
             interCharTimeout = 0
         )
 
+
+    # not from original pwntools, 
+    # why are they left unimplemented if the 
+    # super's method are pretty good (at least as of 3.0.1)
+    def is_line(self, s):
+        if(len(s) > 0 and (s is not None)):
+            return True
+        return False
+    
+    def recvline(self):
+        if not self.conn:
+            raise EOFError
+
+        buf = ""
+        while(not self.is_line(buf)):
+            time.sleep(0.1)
+            buf = self.conn.readline()
+            
+        return buf
+    
+    def sendline(self, data, flush=True):
+        # flush means "remove from recvline"
+        # how to remove from recvline? Do one recvline
+        self.send_raw(data.encode()+b'\r\n')
+        self.recvline()
+
     # Implementation of the methods required for tube
     def recv_raw(self, numb):
         if not self.conn:
