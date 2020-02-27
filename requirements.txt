@@ -1,1 +1,1 @@
-git+git://github.com/hakril/PythonForWindows@master#egg=PythonForWindows
+git+git://github.com/hakril/PythonForWindows@V0.5#egg=PythonForWindows-0.5

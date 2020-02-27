@@ -1,7 +1,7 @@
 from setuptools import setup
 
 PKG_NAME = "PWiNTOOLS"
-VERSION  = "0.3"
+VERSION  = "0.31"
 
 
 setup(
@@ -15,9 +15,9 @@ setup(
     url = 'https://github.com/masthoon/pwintools',
     py_modules=['pwintools'],
     install_requires=[
-        'PythonForWindows==0.4',
+        'PythonForWindows==0.5',
     ],
     dependency_links=[
-        'git+git://github.com/hakril/PythonForWindows@master#egg=PythonForWindows-0.4',
+        'git+git://github.com/hakril/PythonForWindows@V0.5#egg=PythonForWindows-0.5',
     ]
 )
