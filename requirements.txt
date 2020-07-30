@@ -1,2 +1,1 @@
-git+git://github.com/hakril/PythonForWindows@master#egg=PythonForWindows
-pyserial==3.0.1 #for windows XP. Otherwise use the latest version 
+git+git://github.com/hakril/PythonForWindows@V0.5#egg=PythonForWindows-0.5

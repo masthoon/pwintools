@@ -18,7 +18,9 @@ import windows.generated_def as gdef
 from windows.generated_def.winstructs import *
 import windows.native_exec.simple_x64 as x64
 
-import serial
+if sys.version_info[0] == 3:
+    xrange = range
+    print("Python 3 is not supported")
 
 try:
     import capstone
@@ -163,37 +165,39 @@ def p64(i):
     """p64(i) -> str
     Pack 64 bits integer (little endian)
     """
-    return struct.pack('<q', i)
+    return struct.pack('<Q', i)
 
 def u64(s):
     """u64(s) -> int
     Unpack 64 bits integer from a little endian str representation
     """
-    return struct.unpack('<q', s)[0]
+    return struct.unpack('<Q', s)[0]
 
 def p32(i):
     """p32(i) -> str
     Pack 32 bits integer (little endian)
     """
-    return struct.pack('<i', i)
+    return struct.pack('<I', i)
 
 def u32(s):
     """u32(s) -> int
     Unpack 32 bits integer from a little endian str representation
     """
-    return struct.unpack('<i', s)[0]
+    return struct.unpack('<I', s)[0]
     
 def p16(i):
     """p16(i) -> str
     Pack 16 bits integer (little endian)
     """
-    return struct.pack('<h', i)
+    return struct.pack('<H', i)
 
 def u16(s):
     """u16(s) -> int
     Unpack 16 bits integer from a little endian str representation
     """
-    return struct.unpack('<h', s)[0]
+    return struct.unpack('<H', s)[0]
+
+
 
 CreatePipePrototype = gdef.WINFUNCTYPE(gdef.BOOL, gdef.PHANDLE, gdef.PHANDLE, gdef.LPSECURITY_ATTRIBUTES, gdef.DWORD)
 CreatePipeParams = ((1, 'hReadPipe'), (1, 'hReadPipe'), (1, 'lpPipeAttributes'), (1, 'nSize'))
@@ -257,7 +261,11 @@ class MiniLogger(object):
         if isinstance(log_level, int):
             self.logger.setLevel(log_level)
         else:
-            self.logger.setLevel(logging._levelNames[log_level.upper()])
+            if sys.version_info[0] == 3:
+                self.logger.setLevel(logging._nameToLevel[log_level.upper()])
+            else:
+                self.logger.setLevel(logging._levelNames[log_level.upper()])
+            
 
     log_level = property(get_log_level, set_log_level)
     
@@ -435,7 +443,8 @@ class Remote(object):
     
     def read(self, n, timeout = None, no_warning = False):
         """read(n, timeout = None, no_warning = False) tries to read n bytes on the socket before timeout"""
-        self.timeout = timeout
+        if timeout:
+            self.timeout = timeout
         buf = ''
         if not self.check_closed(False):
             try:
@@ -481,16 +490,16 @@ class Remote(object):
         """recvall(force_exception = False, timeout = None) reads all bytes available on the socket before timeout"""
         return self.read(0x100000, timeout, no_warning = True)
         
-    def recvuntil(self, delim, timeout = None):
-        """recvuntil(delim, timeout = None) reads bytes until the delim is present on the socket before timeout"""
+    def recvuntil(self, delim, drop = False, timeout = None):
+        """recvuntil(delim, drop = False, timeout = None) reads bytes until the delim is present on the socket before timeout"""
         buf = ''
         while delim not in buf:
             buf += self.recvn(1, timeout)
-        return buf
+        return buf if not drop else buf[:-len(delim)]
         
-    def recvline(self, timeout = None):
-        """recvline(timeout = None) reads one line on the socket before timeout"""
-        return self.recvuntil(self.newline, timeout)
+    def recvline(self, keepends = True, timeout = None):
+        """recvline(keepends = True, timeout = None) reads one line on the socket before timeout"""
+        return self.recvuntil(self.newline, not keepends, timeout)
             
     def interactive(self, escape = False):
         """interactive(escape = None) allows to interact directly with the socket (escape to show binary content received)"""
@@ -676,6 +685,10 @@ class Process(windows.winobject.process.WinProcess):
         self.stdhandles = not nostdhandles
         self.debuggerpath = r'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\windbg.exe'
         self.newline = '\n'
+        self.__imports = None
+        self.__symbols = None
+        self.__libs = None
+        self.__offsets = None
         
         if self.stdhandles:
             self.stdin = Pipe()
@@ -767,7 +780,8 @@ class Process(windows.winobject.process.WinProcess):
     
     def read(self, n, timeout = None, no_warning = False):
         """read(n, timeout = None, no_warning = False) tries to read n bytes on process stdout before timeout"""
-        self.timeout = timeout
+        if timeout:
+            self.timeout = timeout
         buf = ''
         if self.stdhandles and not self.check_exit():
             buf = self.stdout.read(n)
@@ -803,16 +817,16 @@ class Process(windows.winobject.process.WinProcess):
         """recvall(force_exception = False, timeout = None) reads all bytes available on the process stdout before timeout"""
         return self.read(0x100000, timeout, no_warning = True)
         
-    def recvuntil(self, delim, timeout = None):
-        """recvuntil(delim, timeout = None) reads bytes until the delim is present on the process stdout before timeout"""
+    def recvuntil(self, delim, drop = False, timeout = None):
+        """recvuntil(delim, drop = False, timeout = None) reads bytes until the delim is present on the process stdout before timeout"""
         buf = ''
         while delim not in buf:
             buf += self.recvn(1, timeout)
-        return buf
+        return buf if not drop else buf[:-len(delim)]
         
-    def recvline(self, timeout = None):
-        """recvline(timeout = None) reads one line on the process stdout before timeout"""
-        return self.recvuntil(self.newline, timeout)
+    def recvline(self, keepends = True, timeout = None):
+        """recvline(keepends = True, timeout = None) reads one line on the process stdout before timeout"""
+        return self.recvuntil(self.newline, not keepends, timeout)
             
     def interactive(self, escape = False):
         """interactive(escape = None) allows to interact directly with the socket (escape to show binary content received)"""
@@ -854,8 +868,10 @@ class Process(windows.winobject.process.WinProcess):
         if not self.check_initialized():
             return {}
         pe = self.peb.modules[0].pe
-        # TODO: cache imports
-        return {dll.lower(): {imp.name: imp for imp in imps} for dll, imps in pe.imports.items() if dll}
+        if not self.__imports:
+            pe = self.peb.modules[0].pe
+            self.__imports = {dll.lower(): {imp.name: imp for imp in imps} for dll, imps in pe.imports.items() if dll}
+        return self.__imports
     
     
     def get_import(self, dll, function):
@@ -874,9 +890,9 @@ class Process(windows.winobject.process.WinProcess):
         """symbols returns a dict of the process exports (all DLL) like {'ntdll.dll': {'Sleep': addr, 213: addr, ...}, ...}"""
         if not self.check_initialized():
             return {}
-        # TODO: cache symbols
-        return {module.pe.export_name.lower(): module.pe.exports for module in self.peb.modules if module.pe.export_name}
-    
+        if not self.__symbols:
+            self.__symbols = {module.pe.export_name.lower(): module.pe.exports for module in self.peb.modules if module.pe.export_name}
+        return self.__symbols
     
     def get_proc_address(self, dll, function):
         """get_proc_address(self, dll, function) returns the address of the dll!function"""
@@ -893,8 +909,9 @@ class Process(windows.winobject.process.WinProcess):
         """libs returns a dict of loaded modules with their baseaddr like {'ntdll.dll': 0x123456000, ...}"""
         if not self.check_initialized():
             return {}
-        return {module.name.lower(): module.baseaddr for module in self.peb.modules if module.name}
-    
+        if not self.__libs:
+            self.__libs = {module.name.lower(): module.baseaddr for module in self.peb.modules if module.name}
+        return self.__libs
     
     def close(self):
         """close() closes the process"""
