@@ -504,16 +504,17 @@ class Remote(object):
         t.sock = fs
         t.interact()
 
-class serialtube(serial.Serial):
+class SerialTube(object): # you don't need serial.Serial parent since you use conn
     def __init__(
-            self, port = None, baudrate = 115200,
+            self, port = "COM1", baudrate = 115200,
             convert_newlines = True,
             bytesize = 8, parity='N', stopbits=1, xonxoff = False,
             rtscts = False, dsrdtr = False, *a, **kw):
-        super(serialtube, self).__init__(*a, **kw)
-
-        if port is None:
-            port = "COM1"
+            
+        try:
+            import serial
+        except ImportError:
+           raise(ImportError("pyserial module not found :: Please pip install pyserial==3.0.1"))
             
         self.convert_newlines = convert_newlines
         self.conn = serial.Serial(
@@ -581,6 +582,12 @@ class serialtube(serial.Serial):
             time.sleep(timeout)
 
         return None
+        
+    # Not sure if it's a good idea from the "pwntools" philosophy,
+    # but it seems like recv() should redirect to recv_raw()
+    # maybe things change as Serial implementation advances? Who knows
+    def recv(self, numb, timeout = None):
+        return self.recv_raw(*args, **kwargs)
 
     def recvn(self, n, timeout = None):
         """recvn(n, timeout = None) reads exactly n bytes on the socket before timeout"""
@@ -607,6 +614,13 @@ class serialtube(serial.Serial):
             n = self.conn.write(data)
             data = data[n:]
         self.conn.flush()
+
+    # Not sure if it's a good idea from the "pwntools" philosophy,
+    # but it seems like send() should redirect to send_raw()
+    # maybe things change as Serial implementation advances? Who knows
+    def send(self, data):
+        return self.send_raw(data)
+
 
     def settimeout_raw(self, timeout):
         pass

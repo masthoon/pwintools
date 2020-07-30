@@ -15,7 +15,6 @@ setup(
     url = 'https://github.com/masthoon/pwintools',
     py_modules=['pwintools'],
     install_requires=[
-        'PythonForWindows==0.4',
         'pyserial==3.0.1', #for windows XP. Otherwise use the latest version 
     ],
     dependency_links=[
