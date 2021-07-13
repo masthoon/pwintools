@@ -18,11 +18,6 @@ import windows.generated_def as gdef
 from windows.generated_def.winstructs import *
 import windows.native_exec.simple_x64 as x64
 
-if sys.version_info[0] == 3:
-    xrange = range
-    print("Python 3 is not supported")
-
-
 try:
     import capstone
     def disasm(data, bitness = 64, vma = 0):
@@ -53,7 +48,7 @@ alpha_upper = string.ascii_uppercase
 digits = string.digits
 all_chars = string.ascii_letters+string.digits+' '+string.punctuation
 printable = string.printable
-all256 = ''.join([chr(i) for i in xrange(256)])
+all256 = ''.join([chr(i) for i in range(256)])
 
 class DotDict(dict):
     """Allow access to dict elements using dot"""
@@ -155,7 +150,7 @@ def hexdump(src, length=16):
     """
     FILTER = ''.join([(len(repr(chr(x))) == 3) and chr(x) or '.' for x in range(256)])
     lines = []
-    for c in xrange(0, len(src), length):
+    for c in range(0, len(src), length):
         chars = src[c:c+length]
         hex = ' '.join(["%02x" % ord(x) for x in chars])
         printable = ''.join(["%s" % ((ord(x) <= 127 and FILTER[ord(x)]) or '.') for x in chars])
@@ -351,36 +346,38 @@ def interact(obj, escape = False):
 
 class Pipe(object):
     """Windows pipe support"""
-    def __init__(self, bInheritHandle = 1):
+
+    def __init__(self, bInheritHandle=1):
         attr = SECURITY_ATTRIBUTES()
         attr.lpSecurityDescriptor = 0
         attr.bInheritHandle = bInheritHandle
         attr.nLength = ctypes.sizeof(attr)
         self._rpipe, self._wpipe = CreatePipe(attr)
-        self.timeout = 500 # ms
-        self.tick = 40 # ms
-        
-    def get_handle(self, mode = 'r'):
+        self.timeout = 500  # ms
+        self.tick = 40  # ms
+
+    def get_handle(self, mode='r'):
         """get_handle(mode = 'r') returns the 'r'ead / 'w'rite HANDLE of the pipe"""
         if mode and mode[0] == 'w':
             return self._wpipe
         return self._rpipe
-        
+
     def __del__(self):
-        windows.winproxy.CloseHandle(self._rpipe)
-        windows.winproxy.CloseHandle(self._wpipe)
-    
+        pass
+        """windows.winproxy.CloseHandle(self._rpipe)
+        windows.winproxy.CloseHandle(self._wpipe)"""
+
     def select(self):
         """select() returns the number of bytes available to read on the pipe"""
         return PeekNamedPipe(self._rpipe)
-        
+
     def _read(self, size):
         if size == 0:
             return ''
         buffer = ctypes.create_string_buffer(size)
         windows.winproxy.ReadFile(self._rpipe, buffer)
         return buffer.raw
-        
+
     def read(self, size):
         """read(size) returns the bytes read on the pipe (returned length <= size)"""
         if self.select() < size:
@@ -389,7 +386,7 @@ class Pipe(object):
                 time.sleep(float(self.tick) / 1000)
                 elapsed += self.tick
         return self._read(min(self.select(), size))
-    
+
     def write(self, buffer):
         """write(buffer) sends the buffer on the pipe"""
         windows.winproxy.WriteFile(self._wpipe, buffer)
@@ -526,7 +523,7 @@ class Process(windows.winobject.process.WinProcess):
         self.flags = flags
         self.stdhandles = not nostdhandles
         self.debuggerpath = r'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\windbg.exe'
-        self.newline = '\n'
+        self.newline = b"\n"
         self.__imports = None
         self.__symbols = None
         self.__libs = None
@@ -550,20 +547,25 @@ class Process(windows.winobject.process.WinProcess):
         try: # Accessing PEB
             self.peb.modules[1]
             is_init = True
-        except:
+        except Exception as e:
+            print(e)
             pass
         if not is_init:
-            log.info("Process {:s} not initialized ...".format(self))
+            log.info("Process {0} not initialized ...".format(self))
         return is_init
     
     def wait_initialized(self):
         while not self.check_initialized():
-            time.sleep(0.05)
+            time.sleep(0.50)
                 
     def __del__(self):
+        pass
+        """self.exit(0)
         # TODO: Kill the debugger too
-        if self.__pid and not self.is_exit:
+        if self.__pid:# and not self.is_exit():
             self.exit(0)
+        #os.close(self.stdin)
+        #os.close(self.stdout)"""
     
     def _create_process(self):
         proc_info = PROCESS_INFORMATION()
@@ -578,18 +580,22 @@ class Process(windows.winobject.process.WinProcess):
         lpStartupInfo = ctypes.byref(StartupInfo)
         lpCommandLine = None
         lpApplicationName = self.cmd
+
+
         if isinstance(self.cmd, (list,)):
-            lpCommandLine = (" ".join([str(a) for a in self.cmd]))
+            lpCommandLine = (b" ".join([bytes(a) for a in self.cmd]))
+            print(lpCommandLine)
             lpApplicationName = None
         try:
             windows.winproxy.CreateProcessA(lpApplicationName, lpCommandLine=lpCommandLine, bInheritHandles=True, dwCreationFlags=self.flags, lpProcessInformation=ctypes.byref(proc_info), lpStartupInfo=lpStartupInfo)
             windows.winproxy.CloseHandle(proc_info.hThread)
             self.__pid = proc_info.dwProcessId
             self.__phandle = proc_info.hProcess
-        except Exception:
+        except Exception as exception:
+            print(exception)
             self.__pid = None
             self.__phandle = None
-            log.warning("Process {:s} failed to start!".format(self.cmd))
+            log.warning("Process {0} failed to start!".format(self.cmd))
             return -1
         return 0
     
@@ -609,13 +615,14 @@ class Process(windows.winobject.process.WinProcess):
         return -1
 
     def set_timeout(self, timeout):
-        if timeout:
+        pass
+        """if timeout:
             self._timeout = timeout
             if self.stdhandles:
                 self.stdin.timeout = timeout
                 self.stdout.timeout = timeout
         elif self._timeout != self._default_timeout:
-            self.timeout = self._default_timeout
+            self.timeout = self._default_timeout"""
 
     timeout = property(get_timeout, set_timeout)
     """timeout in ms for read on the process stdout (pipe)"""
@@ -693,7 +700,7 @@ class Process(windows.winobject.process.WinProcess):
                 for section in module.pe.sections:
                     if writable and section.Characteristics & gdef.IMAGE_SCN_MEM_WRITE == 0:
                         continue
-                    for page in xrange(section.start, section.start + section.size, 0x1000):
+                    for page in range(section.start, section.start + section.size, 0x1000):
                         try:
                             pos = self.read_memory(page, min(0x1000, (section.start + section.size) - page)).find(pattern)
                             if pos != -1:
@@ -880,3 +887,4 @@ shellcraft.amd64.LoadLibrary = sc_64_LoadLibrary
 
 shellcraft.amd64.AllocRWX = sc_64_AllocRWX
 """shellcraft.amd64.AllocRWX(addr, rwx_qword) returns str shellcode allocating rwx, writing rwx_qword and jumping on it"""
+
