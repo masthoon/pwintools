@@ -10,7 +10,7 @@ def run_shellcode(sc, debug = False):
     if debug:
         # log.debug(disasm(sc))
         log.debug(hexdump(sc))
-    notepad = Process(r"C:\Windows\system32\notepad.exe", CREATE_SUSPENDED)
+    notepad = Process(b"C:/Windows/system32/notepad.exe", CREATE_SUSPENDED)
     if debug:
         notepad.spawn_debugger()
         log.info("Press 'g' in debugger!")
@@ -33,7 +33,7 @@ def test_shellcode_winexec():
 def test_shellcode_loadlibrary():
     # Works over SMB or WebDAV \\IP\X\X.dll
     #  Or with fullpath D:\Desktop\XYZ\A.dll
-    sc = shellcraft.amd64.LoadLibrary(r"C:\Windows\System32\ntoskrnl.exe")
+    sc = shellcraft.amd64.LoadLibrary(b"C:/Windows/System32/ntoskrnl.exe")
     test = run_shellcode(sc)
     time.sleep(0.5)
     assert('ntoskrnl.exe' in test.libs)
@@ -47,6 +47,6 @@ def test_shellcode_rwx():
     test.close()
 
 
-test_shellcode_winexec()
-test_shellcode_loadlibrary()
+#test_shellcode_winexec()
+#test_shellcode_loadlibrary()
 test_shellcode_rwx()
