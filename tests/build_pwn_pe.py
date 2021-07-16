@@ -5,12 +5,11 @@ from lief import PE
 import windows.native_exec.simple_x86 as x86
 from windows.generated_def import STD_OUTPUT_HANDLE, STD_INPUT_HANDLE
 
-tobytes = lambda x:list(map(ord, x))
 fmt_call = lambda addr: "[0x{:X}]".format(addr)
 call_import = lambda addr: x86.mem(fmt_call(addr))
 
-welcome   = "Welcome to the pwn challenge!\r\n\tLIEF is awesome\r\n"
-test = "cmd.exe\0"
+welcome   = b"Welcome to the pwn challenge!\r\n\tLIEF is awesome\r\n"
+test = b"cmd.exe\0"
 
 imports = {
     "kernel32.dll": {
@@ -31,17 +30,17 @@ binary32 = PE.Binary("pwn.exe", PE.PE_TYPE.PE32)
 
 # Start with 0x100 bytes of \cc
 section_text                 = PE.Section(".text")
-section_text.content         = tobytes(x86.Int3().get_code() * 0x100)
+section_text.content         = bytearray(x86.Int3().get_code() * 0x100)
 section_text.virtual_address = 0x1000
 
 # Init data section
-data_raw = ''
+data_raw = b''
 for obj in data.keys():
     data[obj] = binary32.optional_header.imagebase + len(data_raw) + 0x2000
     data_raw += obj
 
 section_data                 = PE.Section(".data")
-section_data.content         = tobytes(data_raw)
+section_data.content         = bytearray(data_raw)
 section_data.virtual_address = 0x2000
 
 section_text = binary32.add_section(section_text, PE.SECTION_TYPES.TEXT)
@@ -101,7 +100,7 @@ code += x86.Ret()
 
 padded_code = code.get_code()
 padded_code += x86.Nop().get_code() * (0x100 - len(padded_code))
-section_text.content = tobytes(padded_code)
+section_text.content = bytearray(padded_code)
 
 
 builder = PE.Builder(binary32)
