@@ -22,7 +22,6 @@ if sys.version_info[0] == 3:
     xrange = range
     print("Python 3 is not supported")
 
-
 try:
     import capstone
     def disasm(data, bitness = 64, vma = 0):
@@ -513,6 +512,165 @@ class Remote(object):
         t = telnetlib.Telnet()
         t.sock = fs
         t.interact()
+
+class SerialTube(object): # you don't need serial.Serial parent since you use conn
+    def __init__(
+            self, port = "COM1", baudrate = 115200,
+            convert_newlines = True,
+            bytesize = 8, parity='N', stopbits=1, xonxoff = False,
+            rtscts = False, dsrdtr = False, *a, **kw):
+            
+        try:
+            import serial
+        except ImportError:
+           raise(ImportError("pyserial module not found :: Please pip install pyserial==3.0.1"))
+            
+        self.convert_newlines = convert_newlines
+        self.conn = serial.Serial(
+            port = port,
+            baudrate = baudrate,
+            bytesize = bytesize,
+            parity = parity,
+            stopbits = stopbits,
+            timeout = 0.1,
+            xonxoff = xonxoff,
+            rtscts = rtscts,
+            writeTimeout = None,
+            dsrdtr = dsrdtr,
+            interCharTimeout = 0
+        )
+        #assert self.can_recv_raw()
+
+
+    # not from original pwntools, 
+    # why are they left unimplemented if the 
+    # super's method are pretty good (at least as of 3.0.1)
+    def is_line(self, s):
+        if(len(s) > 0 and (s is not None)):
+            return True
+        return False
+    
+    def recvline(self, timeout=None):
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+    
+        if not self.conn:
+            raise EOFError
+
+        buf = ""
+        fin = False
+        while(not fin):
+            buf = self.conn.readline()
+            fin = self.is_line(buf)
+            if(not fin): time.sleep(timeout)
+        
+        return buf
+    
+    def sendline(self, data, flush=True):
+        # flush means "remove from recvline"
+        # how to remove from recvline? Do one recvline
+        self.send_raw(data.encode()+b'\r\n')
+        if(flush): self.recvline()
+
+    # Implementation of the methods required for tube
+    def recv_raw(self, numb, timeout = None):
+    
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+
+    
+        if not self.conn:
+            raise EOFError
+
+        while self.conn:
+            data = self.conn.read(numb)
+
+            if data:
+                return data
+
+            time.sleep(timeout)
+
+        return None
+        
+    # Not sure if it's a good idea from the "pwntools" philosophy,
+    # but it seems like recv() should redirect to recv_raw()
+    # maybe things change as Serial implementation advances? Who knows
+    def recv(self, numb, timeout = None):
+        return self.recv_raw(*args, **kwargs)
+
+    def recvn(self, n, timeout = None):
+        """recvn(n, timeout = None) reads exactly n bytes on the socket before timeout"""
+        buf = self.recv_raw(n, timeout)
+        if len(buf) != n:
+            raise(EOFError("Timeout {:s} - Incomplete read".format(self)))
+        return buf
+        
+    def recvuntil(self, delim, timeout = None):
+        """recvuntil(delim, timeout = None) reads bytes until the delim is present on the socket before timeout"""
+        buf = ''
+        while delim not in buf:
+            buf += self.recvn(1, timeout)
+        return buf
+
+    def send_raw(self, data):
+        if not self.conn:
+            raise EOFError
+
+        if self.convert_newlines:
+            data = data.replace(b'\n', b'\r\n')
+
+        while data:
+            n = self.conn.write(data)
+            data = data[n:]
+        self.conn.flush()
+
+    # Not sure if it's a good idea from the "pwntools" philosophy,
+    # but it seems like send() should redirect to send_raw()
+    # maybe things change as Serial implementation advances? Who knows
+    def send(self, data):
+        return self.send_raw(data)
+
+
+    def settimeout_raw(self, timeout):
+        pass
+
+    def can_recv_raw(self, timeout=None):
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+    
+        if self.conn:
+            if self.conn.inWaiting():
+                return True
+            else:
+                time.sleep(timeout)
+                return (self.conn.inWaiting() > 0)
+        return False
+        
+    def recvall(self, timeout=None):
+        if(timeout is None):
+            timeout=max(self.conn.timeout, 0.1)
+    
+        buf = ""
+        while(self.can_recv_raw(timeout)):
+            buf = buf + self.recvline()
+        return buf
+
+    def connected_raw(self, direction):
+        return self.conn != None
+
+    def close(self):
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+
+    def fileno(self):
+        if not self.connected():
+            self.error("A closed serialtube does not have a file number")
+
+        return self.conn.fileno()
+
+    def shutdown_raw(self, direction):
+        self.close()
 
 class Process(windows.winobject.process.WinProcess):
     """
