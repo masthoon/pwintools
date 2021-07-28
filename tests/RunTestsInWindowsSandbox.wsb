@@ -1,0 +1,13 @@
+<Configuration>
+<vGPU>Enable</vGPU>
+<Networking>Default</Networking>
+<MappedFolders>
+   <MappedFolder>
+     <HostFolder>CHANGEPATHHERE\pwintools</HostFolder>
+     <ReadOnly>true</ReadOnly>
+   </MappedFolder>
+</MappedFolders>
+<LogonCommand>
+   <Command>C:\users\WDAGUtilityAccount\Desktop\pwintools\tests\run_tests.bat</Command>
+</LogonCommand>
+</Configuration>

@@ -357,6 +357,9 @@ class Pipe(object):
         attr.bInheritHandle = bInheritHandle
         attr.nLength = ctypes.sizeof(attr)
         self._rpipe, self._wpipe = CreatePipe(attr)
+        self._rh = [h for h in windows.current_process.handles if h.value == self._rpipe][0]
+        self._wh = [h for h in windows.current_process.handles if h.value == self._wpipe][0]
+
         self.timeout = 500 # ms
         self.tick = 40 # ms
         
@@ -369,6 +372,9 @@ class Pipe(object):
     def __del__(self):
         windows.winproxy.CloseHandle(self._rpipe)
         windows.winproxy.CloseHandle(self._wpipe)
+    
+    def number_of_clients(self):
+        return max(self._rh.infos.HandleCount, self._wh.infos.HandleCount)
     
     def select(self):
         """select() returns the number of bytes available to read on the pipe"""
@@ -600,9 +606,24 @@ class Process(windows.winobject.process.WinProcess):
             else:
                 log.warning("EOFError: Process {:s} exited".format(self))
     
-    def check_closed(self):
-        self.check_exit(True)
+    def check_closed(self, raise_exc=False):
+        if self.stdhandles and self.client_count() < 2:
+            if raise_exc:
+                raise(EOFError("Process {:s} I/O is closed".format(self)))
+            else:
+                log.warning("EOFError: Process {:s} I/O is closed".format(self))
+            return True
+        elif self.stdhandles:
+            return False
+        else:
+            return self.check_exit(raise_exc)
     
+    def client_count(self):
+        if not self.stdhandles:
+            log.error("client_count called on process {:s} with no input forwarding".format(self))
+            return 0
+        return max(self.stdin.number_of_clients(), self.stdout.number_of_clients())
+
     def get_timeout(self):
         if self.stdhandles:
             return self._timeout
@@ -625,15 +646,16 @@ class Process(windows.winobject.process.WinProcess):
         if timeout:
             self.timeout = timeout
         buf = ''
-        if self.stdhandles and not self.check_exit():
+        if self.stdhandles: # allow reading a closed end
             buf = self.stdout.read(n)
             if not no_warning and len(buf) != n:
                 log.warning("EOFError: Timeout {:s} - Incomplete read".format(self))
+        self.check_closed() # but signal it
         return buf
     
     def write(self, buf):
         """write(buf) sends the buf to the process stdin"""
-        if self.stdhandles and not self.check_exit(True):
+        if self.stdhandles and not self.check_closed(True):
             return self.stdin.write(buf)
             
     def send(self, buf):
