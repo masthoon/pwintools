@@ -27,8 +27,11 @@ def test_shellcode_winexec():
     test.close()
     # Close the child process
     for n_proc in notepads:
-        if pattern in n_proc.peb.commandline.str:
-            n_proc.exit(0)
+        try:
+            if pattern in n_proc.peb.commandline.str.encode("utf-8"):
+                n_proc.exit(0)
+        except:
+            pass
 
 def test_shellcode_loadlibrary():
     # Works over SMB or WebDAV \\IP\X\X.dll
@@ -47,6 +50,6 @@ def test_shellcode_rwx():
     test.close()
 
 
-#test_shellcode_winexec()
-#test_shellcode_loadlibrary()
+test_shellcode_winexec()
+test_shellcode_loadlibrary()
 test_shellcode_rwx()

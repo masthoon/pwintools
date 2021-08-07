@@ -833,26 +833,25 @@ def sc_64_pushstr(s):
     return PushStr_sc
 
 def sc_64_WinExec(exe):
-    dll = b"KERNEL32.DLL\x00".encode("utf-16-le")
+    dll = bytes("KERNEL32.DLL\x00".encode("utf-16-le"))
     api = b"WinExec\x00"
     WinExec64_sc = x64.MultipleInstr()
-    map(WinExec64_sc.__iadd__, [
-        shellcraft.amd64.pushstr(dll),
-        x64.Mov("RCX", "RSP"),
-        shellcraft.amd64.pushstr(api),
-        x64.Mov("RDX", "RSP"),
-        x64.Call(":FUNC_GETPROCADDRESS64"),
-        x64.Mov("R10", "RAX"),
-        shellcraft.amd64.pushstr(exe),
-        x64.Mov("RCX", "RSP"),
-        x64.Sub("RSP", 0x30),
-        x64.And("RSP", -32),
-        x64.Call("R10"),
-        x64.Label(":HERE"),
-        x64.Jmp(":HERE"), # Dirty infinite loop
-        # x64.Ret(),
-        windows.native_exec.nativeutils.GetProcAddress64,
-    ])
+    WinExec64_sc += shellcraft.amd64.pushstr(dll)
+    WinExec64_sc += x64.Mov("RCX", "RSP")
+    WinExec64_sc += shellcraft.amd64.pushstr(api)
+    WinExec64_sc += x64.Mov("RDX", "RSP")
+    WinExec64_sc += x64.Call(":FUNC_GETPROCADDRESS64")
+    WinExec64_sc += x64.Mov("R10", "RAX")
+    WinExec64_sc += shellcraft.amd64.pushstr(exe)
+    WinExec64_sc += x64.Mov("RCX", "RSP")
+    WinExec64_sc += x64.Sub("RSP", 0x30)
+    WinExec64_sc += x64.And("RSP", -32)
+    WinExec64_sc += x64.Call("R10")
+    WinExec64_sc += x64.Label(":HERE")
+    WinExec64_sc += x64.Jmp(":HERE")
+    WinExec64_sc += windows.native_exec.nativeutils.GetProcAddress64# Dirty infinite loop
+    #WinExec64_sc +=# x64.Ret(),
+
     return WinExec64_sc.get_code()
 
 
@@ -861,23 +860,22 @@ def sc_64_LoadLibrary(dll_path):
     dll = bytes("KERNEL32.DLL\x00".encode("utf-16-le"))
     api = b"LoadLibraryA\x00"
     LoadLibrary64_sc = x64.MultipleInstr()
-    map(LoadLibrary64_sc.__iadd__, [
-        shellcraft.amd64.pushstr(dll),
-        x64.Mov("RCX", "RSP"),
-        shellcraft.amd64.pushstr(api),
-        x64.Mov("RDX", "RSP"),
-        x64.Call(":FUNC_GETPROCADDRESS64"),
-        x64.Mov("R10", "RAX"),
-        shellcraft.amd64.pushstr(dll_path),
-        x64.Mov("RCX", "RSP"),
-        x64.Sub("RSP", 0x30),
-        x64.And("RSP", -32),
-        x64.Call("R10"),
-        x64.Label(":HERE"),
-        x64.Jmp(":HERE"), # Dirty infinite loop
-        # x64.Ret(),
-        windows.native_exec.nativeutils.GetProcAddress64,
-    ])
+
+    LoadLibrary64_sc += shellcraft.amd64.pushstr(dll)
+    LoadLibrary64_sc += x64.Mov("RCX", "RSP")
+    LoadLibrary64_sc += shellcraft.amd64.pushstr(api)
+    LoadLibrary64_sc += x64.Mov("RDX", "RSP")
+    LoadLibrary64_sc += x64.Call(":FUNC_GETPROCADDRESS64")
+    LoadLibrary64_sc += x64.Mov("R10", "RAX")
+    LoadLibrary64_sc += shellcraft.amd64.pushstr(dll_path)
+    LoadLibrary64_sc += x64.Mov("RCX", "RSP")
+    LoadLibrary64_sc += x64.Sub("RSP", 0x30)
+    LoadLibrary64_sc += x64.And("RSP", -32)
+    LoadLibrary64_sc += x64.Call("R10")
+    LoadLibrary64_sc += x64.Label(":HERE")
+    LoadLibrary64_sc += x64.Jmp(":HERE")
+    LoadLibrary64_sc += windows.native_exec.nativeutils.GetProcAddress64
+
     return LoadLibrary64_sc.get_code()
 
 
@@ -885,26 +883,26 @@ def sc_64_AllocRWX(address, rwx_qword):
     dll = "KERNEL32.DLL\x00".encode("utf-16-le")
     api = b"VirtualAlloc\x00"
     AllocRWX64_sc = x64.MultipleInstr()
-    map(AllocRWX64_sc.__iadd__, [
-        shellcraft.amd64.pushstr(dll),
-        x64.Mov("RCX", "RSP"),
-        shellcraft.amd64.pushstr(api),
-        x64.Mov("RDX", "RSP"),
-        x64.Call(":FUNC_GETPROCADDRESS64"),
-        x64.Mov("R10", "RAX"),
-        x64.Mov("RCX", address),
-        x64.Mov("RDX", 0x1000),
-        x64.Mov("R8", MEM_COMMIT | MEM_RESERVE),
-        x64.Mov("R9", PAGE_EXECUTE_READWRITE),
-        x64.Sub("RSP", 0x30),
-        x64.And("RSP", -32),
-        x64.Call("R10"),
-        x64.Mov('RAX', rwx_qword),
-        x64.Mov("RCX", address),
-        x64.Mov(x64.mem('[RCX]'), 'RAX'),
-        x64.Call("RCX"),
-        windows.native_exec.nativeutils.GetProcAddress64,
-    ])
+
+    AllocRWX64_sc += shellcraft.amd64.pushstr(dll)
+    AllocRWX64_sc += x64.Mov("RCX", "RSP")
+    AllocRWX64_sc += shellcraft.amd64.pushstr(api)
+    AllocRWX64_sc += x64.Mov("RDX", "RSP")
+    AllocRWX64_sc += x64.Call(":FUNC_GETPROCADDRESS64")
+    AllocRWX64_sc += x64.Mov("R10", "RAX")
+    AllocRWX64_sc += x64.Mov("RCX", address)
+    AllocRWX64_sc += x64.Mov("RDX", 0x1000)
+    AllocRWX64_sc += x64.Mov("R8", MEM_COMMIT | MEM_RESERVE)
+    AllocRWX64_sc += x64.Mov("R9", PAGE_EXECUTE_READWRITE)
+    AllocRWX64_sc += x64.Sub("RSP", 0x30)
+    AllocRWX64_sc += x64.And("RSP", -32)
+    AllocRWX64_sc += x64.Call("R10")
+    AllocRWX64_sc += x64.Mov('RAX', rwx_qword)
+    AllocRWX64_sc += x64.Mov("RCX", address)
+    AllocRWX64_sc += x64.Mov(x64.mem('[RCX]'), 'RAX')
+    AllocRWX64_sc += x64.Call("RCX")
+    AllocRWX64_sc += windows.native_exec.nativeutils.GetProcAddress64
+
     return AllocRWX64_sc.get_code()
 
 
