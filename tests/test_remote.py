@@ -9,7 +9,7 @@ escape = len(sys.argv) > 1
 r = Remote('127.0.0.1', 8888)
 log.info(r)
 # Send 'PING' and waits for 'PONG' and detect connection closed
-r.sendline(b'PING')
+r.sendline('PING')
 buf = r.recvall()
 assert(buf == b'PONG')
 r.write(b'OK' + b'\n')

@@ -10,7 +10,7 @@ def run_shellcode(sc, debug = False):
     if debug:
         # log.debug(disasm(sc))
         log.debug(hexdump(sc))
-    notepad = Process(b"C:/Windows/system32/notepad.exe", CREATE_SUSPENDED)
+    notepad = Process(r"C:\Windows\system32\notepad.exe", CREATE_SUSPENDED)
     if debug:
         notepad.spawn_debugger()
         log.info("Press 'g' in debugger!")
@@ -22,21 +22,24 @@ def test_shellcode_winexec():
     sc = shellcraft.amd64.WinExec(b"notepad.exe" + pattern)
     test = run_shellcode(sc)
     time.sleep(0.5)
+    # Validate the process 'notepad PROBABLY_WILL_NOT_FIND_THIS_FILE' spawned
+    notepad_child_spawned = None
     notepads = [p for p in windows.system.processes if p.name == "notepad.exe"]
-    assert(any([pattern in p.peb.commandline.str.encode('utf-16be').replace(b'\0', b'') for p in notepads]))
+    for proc in notepads:
+        try:
+            if pattern in p.peb.commandline.str.encode('utf-16be').replace(b'\0', b''):
+                notepad_child_spawned = proc
+        except windows.winproxy.error.WinproxyError:
+            pass
+    assert(notepad_child_spawned)
     test.close()
     # Close the child process
-    for n_proc in notepads:
-        try:
-            if pattern in n_proc.peb.commandline.str.encode("utf-8"):
-                n_proc.exit(0)
-        except:
-            pass
+    notepad_child_spawned.exit(0)
 
 def test_shellcode_loadlibrary():
     # Works over SMB or WebDAV \\IP\X\X.dll
     #  Or with fullpath D:\Desktop\XYZ\A.dll
-    sc = shellcraft.amd64.LoadLibrary(b"C:/Windows/System32/ntoskrnl.exe")
+    sc = shellcraft.amd64.LoadLibrary(r"C:\Windows\System32\ntoskrnl.exe")
     test = run_shellcode(sc)
     time.sleep(0.5)
     assert('ntoskrnl.exe' in test.libs)

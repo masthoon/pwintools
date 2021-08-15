@@ -6,7 +6,7 @@ from pwintools import *
 log.log_level = 'error'
 
 # Run pwn.exe
-proc = Process([b"pwn.exe"])
+proc = Process("pwn.exe")
 log.info(proc)
 
 # Search in memory cmd.exe
