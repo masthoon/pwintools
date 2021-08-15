@@ -1,6 +1,8 @@
+import io
 import os
 import sys
 import time
+import codecs
 import ctypes
 import msvcrt
 import random
@@ -9,8 +11,8 @@ import struct
 import socket
 import logging
 import threading
+import functools
 
-from windows import *
 import windows
 import windows.winobject
 import windows.winproxy
@@ -18,7 +20,20 @@ import windows.native_exec.nativeutils
 import windows.generated_def as gdef
 from windows.generated_def.winstructs import *
 import windows.native_exec.simple_x64 as x64
-import windows.debug
+
+PY3 = False
+if sys.version_info[0] == 3:
+    PY3 = True
+    xrange = range
+    # Windows \r\n to \n on Python 3
+    def newline_compat(func, *args, **kwargs):
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+            if result.endswith(b'\r\n'):
+                result = result[:-2] + b'\n'
+            return result
+        return wrapper
+    sys.stdin.buffer.readline = newline_compat(sys.stdin.buffer.readline)
 
 try:
     import capstone
@@ -50,13 +65,28 @@ alpha_upper = string.ascii_uppercase
 digits = string.digits
 all_chars = string.ascii_letters+string.digits+' '+string.punctuation
 printable = string.printable
-all256 = ''.join([chr(i) for i in range(256)])
+b_printable = list(filter(lambda c: c not in [0x9, 0xa, 0xb, 0xc, 0xd], list(map(ord, string.printable))))
+all256 = ''.join([chr(i) for i in xrange(256)])
 
 class DotDict(dict):
     """Allow access to dict elements using dot"""
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
+
+
+def encode_string_escape(bytes_data):
+    res = b''
+    for c in bytes_data:
+        if c in b_printable:
+            res += bytes([c])
+        elif c == 0xa:
+            res += b'\\n'
+        elif c == 0x9:
+            res += b'   '
+        else:
+            res += b'\\x%02x' % c
+    return res
 
 
 def xor_pair(data, avoid = '\x00\n'):
@@ -72,7 +102,7 @@ def xor_pair(data, avoid = '\x00\n'):
         >>> xor_pair("test")
         ('\\x01\\x01\\x01\\x01', 'udru')
     """
-    alphabet = list(chr(n) for n in range(256) if chr(n) not in avoid)
+    alphabet = list(chr(n) for n in xrange(256) if chr(n) not in avoid)
     res1 = ''
     res2 = ''
     for c1 in data:
@@ -105,7 +135,7 @@ def bruteforce(charset, min_len=1, max_len=8):
     Charsets: alpha, alpha_lower, alpha_upper, digits, printable, all256
     """
     import itertools
-    return itertools.chain.from_iterable((''.join(l) for l in itertools.product(charset, repeat=i)) for i in range(min_len, max_len + 1))
+    return itertools.chain.from_iterable((''.join(l) for l in itertools.product(charset, repeat=i)) for i in xrange(min_len, max_len + 1))
 
 def cut(s, n):
     """cut(s, n) -> list
@@ -114,7 +144,7 @@ def cut(s, n):
       >>> cut('020304', 2)
       ['02', '03', '04']
     """
-    return [s[i:i+n] for i in range(0, len(s), n)]
+    return [s[i:i+n] for i in xrange(0, len(s), n)]
 
 def ordlist(s):
     """ordlist(s) -> list
@@ -144,20 +174,60 @@ def randstr(length=8, charset=all_chars):
     """randstr(length=8, charset=all_chars) -> str
     Randomly select (length) chars from the charset.
     """
-    return ''.join(random.choice(charset) for _ in range(length))
+    return ''.join(random.choice(charset) for _ in xrange(length))
 
-def hexdump(src, length=16):
-    """hexdump(src, length=16) -> str
-    From a binary src returns the hexdump aligned on length (16)
+def ordp(c):
     """
-    FILTER = ''.join([(len(repr(chr(x))) == 3) and chr(x) or '.' for x in range(256)])
-    lines = []
-    for c in range(0, len(src), length):
-        chars = src[c:c+length]
-        hex = ' '.join(["%02x" % ord(x) for x in chars])
-        printable = ''.join(["%s" % ((ord(x) <= 127 and FILTER[ord(x)]) or '.') for x in chars])
-        lines.append("%04x  %-*s  %s\n" % (c, length*3, hex, printable))
-    return ''.join(lines)
+    Helper that returns a printable binary data representation.
+    """
+    output = []
+    if PY3:
+        for i in c:
+            if (i < 32) or (i >= 127):
+                output.append('.')
+            else:
+                output.append(chr(i))
+    else:
+        for i in c:
+            j = ord(i)
+            if (j < 32) or (j >= 127):
+                output.append('.')
+            else:
+                output.append(i)
+    return ''.join(output)
+
+def hexdump(p):
+    """
+    Return a hexdump representation of binary data.
+    Usage:
+    >>> from hexdump import hexdump
+    >>> print(hexdump(
+    ...     b'\\x00\\x01\\x43\\x41\\x46\\x45\\x43\\x41\\x46\\x45\\x00\\x01'
+    ... ))
+    0000   00 01 43 41 46 45 43 41  46 45 00 01               ..CAFECAFE..
+    """
+    output = []
+    l = len(p)
+    i = 0
+    while i < l:
+        output.append('{:04x}  '.format(i))
+        for j in range(16):
+            if (i + j) < l:
+                if PY3:
+                    byte = p[i + j]
+                else:
+                    byte = ord(p[i + j])
+                output.append('{:02X} '.format(byte))
+            else:
+                output.append('   ')
+            if (j % 16) == 7:
+                output.append(' ')
+        output.append('  ')
+        output.append(ordp(p[i:i + 16]))
+        output.append('\n')
+        i += 16
+    return ''.join(output)
+
 
 def p64(i):
     """p64(i) -> str
@@ -309,17 +379,30 @@ def interact(obj, escape = False):
     go.clear()
     def recv_thread():
         while not go.is_set():
-            cur = str(obj.recvall(timeout = 200))
-            cur = cur.replace('\r\n', '\n')
-            if escape:
-                cur = cur.encode('string-escape')
-                cur = cur.replace('\\n', '\n')#check bytes
-                cur = cur.replace('\\t', '\t')#check bytes
-                cur = cur.replace('\\\\', '\\')#check bytes
+            cur = obj.recvall(timeout = 200)
+            if PY3 and isinstance(cur, bytes):
+                cur = cur.replace(b'\r\n', b'\n')
+                if escape:
+                    cur = encode_string_escape(cur)
+                    cur = cur.replace(b'\\n', b'\n')
+            else:
+                cur = cur.replace('\r\n', '\n')
+                if escape:
+                    cur = cur.encode('string-escape')
+                    cur = cur.replace('\\n', '\n')
+                    cur = cur.replace('\\t', '\t')
+                    cur = cur.replace('\\\\', '\\')
             if cur:
-                sys.stdout.buffer.write(bytes(cur.encode()))
-                if escape and not cur.endswith(b'\n'):
-                    sys.stdout.buffer.write(b'\n')
+                if PY3:
+                    sys.stdout.buffer.write(cur)
+                else:
+                    sys.stdout.write(cur)
+                if escape:
+                    if (isinstance(cur, bytes) and not cur.endswith(b'\n')) or (isinstance(cur, str) and not cur.endswith('\n')):
+                        if PY3:
+                            sys.stdout.buffer.write(b'\n')
+                        else:
+                            sys.stdout.write(b'\n')
                 sys.stdout.flush()
             go.wait(0.2)
 
@@ -333,7 +416,10 @@ def interact(obj, escape = False):
             go.wait(0.2)
             try:
                 obj.check_closed()
-                data = sys.stdin.readline() 
+                if PY3:
+                    data = sys.stdin.buffer.readline()
+                else:
+                    data = sys.stdin.readline()
                 if data:
                     obj.send(data)
                 else:
@@ -399,7 +485,15 @@ class Pipe(object):
 
     def write(self, buffer):
         """write(buffer) sends the buffer on the pipe"""
-        windows.winproxy.WriteFile(self._wpipe, buffer)
+        b_buff = buffer
+        if PY3:
+            if isinstance(buffer, str):
+                b_buff = bytes(buffer.encode())
+            elif isinstance(buffer, (bytes, bytearray)):
+                b_buff = buffer
+            else:
+                raise(NotImplementedError("Unsupported type of buffer {0} in Remote.write".format(type(buf))))
+        windows.winproxy.WriteFile(self._wpipe, b_buff)
 
 class Remote(object):
     """
@@ -416,7 +510,7 @@ class Remote(object):
             self.sock.connect((ip, port))
         except socket.timeout:
             self._closed = True
-            log.error("EOFError: Socket {:s} connection failed".format(self))
+            log.error("EOFError: Socket {0} connection failed".format(self))
             
         self._closed = False
         self.newline = b"\n"
@@ -431,9 +525,9 @@ class Remote(object):
         
     def check_closed(self, force_exception = True):
         if self._closed and force_exception:
-            raise(EOFError("Socket {:s} closed".format(self)))
+            raise(EOFError("Socket {0} closed".format(self)))
         elif self._closed:
-            log.warning("EOFError: Socket {:s} closed".format(self))
+            log.warning("EOFError: Socket {0} closed".format(self))
         return self._closed
     
     def get_timeout(self):
@@ -453,32 +547,32 @@ class Remote(object):
         """read(n, timeout = None, no_warning = False) tries to read n bytes on the socket before timeout"""
         if timeout:
             self.timeout = timeout
-        buf = ''
+        buf = b''
         if not self.check_closed(False):
             try:
                 buf = self.sock.recv(n)
             except socket.timeout:
                 if not no_warning:
-                    log.warning("EOFError: Timeout {:s} - Incomplete read".format(self))
+                    log.warning("EOFError: Timeout {0} - Incomplete read".format(self))
             except socket.error:
                 self._closed = True
                 if not no_warning:
-                    log.warning("EOFError: Socket {:s} closed".format(self))
+                    log.warning("EOFError: Socket {0} closed".format(self))
         return buf
     
     def write(self, buf):
         """write(buf) sends the buf to the socket"""
         if not self.check_closed(True):
             try:
-                if type(buf) == str:
+                if isinstance(buf, str):
                     return self.sock.send(bytes(buf.encode()))
-                elif type(buf) == bytes:
+                elif isinstance(buf, (bytes, bytearray)):
                     return self.sock.send(buf)
                 else:
-                    print("error")
+                    raise(NotImplementedError("Unsupported type of buffer {0} in Remote.write".format(type(buf))))
             except socket.error:
                 self._closed = True
-                log.warning("EOFError: Socket {:s} closed".format(self))
+                log.warning("EOFError: Socket {0} closed".format(self))
             
     def send(self, buf):
         """send(buf) sends the buf to the socket"""
@@ -486,7 +580,10 @@ class Remote(object):
         
     def sendline(self, line):
         """sendline(line) sends the line adding newline to the socket"""
-        self.write(line + self.newline)
+        if isinstance(line, (bytes, bytearray)):
+            self.write(line + self.newline)
+        else:
+            self.write(line + "\n")
         
     def recv(self, n, timeout = None):
         """recv(n, timeout = None) tries to read n bytes on the socket before timeout"""
@@ -496,7 +593,7 @@ class Remote(object):
         """recvn(n, timeout = None) reads exactly n bytes on the socket before timeout"""
         buf = self.read(n, timeout)
         if len(buf) != n:
-            raise(EOFError("Timeout {:s} - Incomplete read".format(self)))
+            raise(EOFError("Timeout {0} - Incomplete read".format(self)))
         return buf
     
     def recvall(self, force_exception = False, timeout = None):
@@ -528,7 +625,7 @@ class Remote(object):
 
 
 
-class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
+class Process(windows.winobject.process.WinProcess):
     """
         Wrapper for Windows process
             Process(r"C:\Windows\system32\mspaint.exe")
@@ -536,6 +633,7 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
             Process([r"C:\Windows\system32\cmd.exe", '-c', 'echo', 'test'])
     """
     def __init__(self, cmdline, flags = 0, nostdhandles = False):
+        self.__pid = None
         self.cmd = cmdline
         self.flags = flags
         self.stdhandles = not nostdhandles
@@ -555,8 +653,9 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
 
         if self._create_process() != 0:
             raise(ValueError("CreateProcess failed - Invalid arguments"))
-        super().__init__(pid=self.mypid, handle=self.myphandle)
-        if flags != CREATE_SUSPENDED:
+
+        super(Process, self).__init__(pid=self.__pid, handle=self.__handle)
+        if not (flags & CREATE_SUSPENDED):
             self.wait_initialized()
     
     def check_initialized(self):
@@ -565,25 +664,19 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
             self.peb.modules[1]
             is_init = True
         except Exception as e:
-            log.info(e)
             pass
         if not is_init:
             log.info("Process {0} not initialized ...".format(self))
         return is_init
     
     def wait_initialized(self):
-
         while not self.check_initialized():
-            print(GetLastError())
-            time.sleep(0.50)
+            time.sleep(0.05)
                 
     def __del__(self):
-        pass
-        """"# TODO: Kill the debugger too
-        if self.__pid:  # and not self.is_exit():
+        # TODO: Kill the debugger too
+        if self.__pid and not self.is_exit:
             self.exit(0)
-        # os.close(self.stdin)
-        # os.close(self.stdout)"""
     
     def _create_process(self):
         proc_info = PROCESS_INFORMATION()
@@ -599,18 +692,20 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
         lpCommandLine = None
         lpApplicationName = self.cmd
 
-
         if isinstance(self.cmd, (list,)):
             lpCommandLine = (b" ".join([bytes(a) for a in self.cmd]))
             lpApplicationName = None
+        elif isinstance(lpApplicationName, str) and PY3:
+            lpApplicationName = lpApplicationName.encode()
         try:
+            # TODO switch to CreateProcessZ
             windows.winproxy.CreateProcessA(lpApplicationName, lpCommandLine=lpCommandLine, bInheritHandles=True, dwCreationFlags=self.flags, lpProcessInformation=ctypes.byref(proc_info), lpStartupInfo=lpStartupInfo)
             windows.winproxy.CloseHandle(proc_info.hThread)
-            self.mypid = proc_info.dwProcessId
-            self.myphandle = proc_info.hProcess
+            self.__pid = proc_info.dwProcessId
+            self.__handle = proc_info.hProcess
         except Exception as exception:
             self.__pid = None
-            self.__phandle = None
+            self.__handle = None
             log.warning("Exception {0}: Process {1} failed to start!".format(exception, self.cmd))
             return -1
         return 0
@@ -625,9 +720,9 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
     def check_closed(self, raise_exc=False):
         if self.stdhandles and self.client_count() < 2:
             if raise_exc:
-                raise(EOFError("Process {:s} I/O is closed".format(self)))
+                raise(EOFError("Process {0} I/O is closed".format(self)))
             else:
-                log.warning("EOFError: Process {:s} I/O is closed".format(self))
+                log.warning("EOFError: Process {0} I/O is closed".format(self))
             return True
         elif self.stdhandles:
             return False
@@ -636,7 +731,7 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
     
     def client_count(self):
         if not self.stdhandles:
-            log.error("client_count called on process {:s} with no input forwarding".format(self))
+            log.error("client_count called on process {0} with no input forwarding".format(self))
             return 0
         return max(self.stdin.number_of_clients(), self.stdout.number_of_clients())
 
@@ -646,14 +741,13 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
         return -1
 
     def set_timeout(self, timeout):
-        pass
-        """if timeout:
+        if timeout:
             self._timeout = timeout
             if self.stdhandles:
                 self.stdin.timeout = timeout
                 self.stdout.timeout = timeout
         elif self._timeout != self._default_timeout:
-            self.timeout = self._default_timeout"""
+            self.timeout = self._default_timeout
 
     timeout = property(get_timeout, set_timeout)
     """timeout in ms for read on the process stdout (pipe)"""
@@ -667,7 +761,7 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
         if self.stdhandles:
             buf = self.stdout.read(n)
             if not no_warning and len(buf) != n:
-                log.warning("EOFError: Timeout {:s} - Incomplete read".format(self))
+                log.warning("EOFError: Timeout {0} - Incomplete read".format(self))
         self.check_closed() # but signal it
         return buf
     
@@ -682,7 +776,10 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
         
     def sendline(self, line):
         """sendline(line) sends the line adding newline to the process stdin"""
-        self.write(line + self.newline)
+        if isinstance(line, (bytes, bytearray)):
+            self.write(line + self.newline)
+        else:
+            self.write(line + "\n")
         
     def recv(self, n, timeout = None):
         """recv(n, timeout = None) tries to read n bytes on the process stdout before timeout"""
@@ -692,7 +789,7 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
         """recvn(n, timeout = None) reads exactly n bytes on the process stdout before timeout"""
         buf = self.read(n, timeout)
         if len(buf) != n:
-            raise(EOFError("Timeout {:s} - Incomplete read".format(self)))
+            raise(EOFError("Timeout {0} - Incomplete read".format(self)))
         return bytes(buf)
     
     def recvall(self, force_exception = False, timeout = None):
@@ -717,23 +814,24 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
     def leak(self, addr, count = 1):
         """leak(addr, count = 1) reads count bytes of the process memory at addr"""
         if not self.check_initialized():
-            return ''
+            raise Exception("Error: PEB not initialized while reading memory")
         try:
             return self.read_memory(addr, count)
         except Exception as e:
-            log.warning("{}: {:s} {}".format(e.__class__.__name__, self, str(e)))
-            return ''
+            log.warning(str(e))
+            return b''
 
     def search(self, pattern, writable = False):
         """search(pattern, writable = False) search pattern in all loaded modules (EXE + DLL) ; returns the addr (0 on error)"""
         if not self.check_initialized():
-            return 0
+            raise Exception("Error: PEB not initialized while searching a pattern in memory")
+
         for module in self.peb.modules:
             try:
                 for section in module.pe.sections:
                     if writable and section.Characteristics & gdef.IMAGE_SCN_MEM_WRITE == 0:
                         continue
-                    for page in range(section.start, section.start + section.size, 0x1000):
+                    for page in xrange(section.start, section.start + section.size, 0x1000):
                         try:
                             pos = self.read_memory(page, min(0x1000, (section.start + section.size) - page)).find(pattern)
                             if pos != -1:
@@ -749,7 +847,6 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
         """imports returns a dict of main EXE imports like {'ntdll.dll': {'Sleep': <IATEntry type - .addr .value>, ...}, ...}"""
         if not self.check_initialized():
             raise Exception("Error: PEB not initialized while getting the imports")
-            pass
 
         pe = self.peb.modules[0].pe
         if not self.__imports:
@@ -762,7 +859,6 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
         """get_import(self, dll, function) returns the address of the import dll!function"""
         if self.check_initialized() == False:
             raise Exception("Error: PEB not initialized while getting the imports")
-            pass
 
         pe = self.peb.modules[0].pe
         if dll in pe.imports:
@@ -776,7 +872,8 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
     def symbols(self):
         """symbols returns a dict of the process exports (all DLL) like {'ntdll.dll': {'Sleep': addr, 213: addr, ...}, ...}"""
         if not self.check_initialized():
-            return {}
+            raise Exception("Error: PEB not initialized while getting the exports")
+
         if not self.__symbols:
             self.__symbols = {module.pe.export_name.lower(): module.pe.exports for module in self.peb.modules if module.pe.export_name}
         return self.__symbols
@@ -795,7 +892,7 @@ class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
     def libs(self):
         """libs returns a dict of loaded modules with their baseaddr like {'ntdll.dll': 0x123456000, ...}"""
         if not self.check_initialized():
-            return {}
+            raise Exception("Error: PEB not initialized while getting the loaded modules")
         if not self.__libs:
             self.__libs = {module.name.lower(): module.baseaddr for module in self.peb.modules if module.name}
         return self.__libs
@@ -835,6 +932,10 @@ def sc_64_pushstr(s):
 def sc_64_WinExec(exe):
     dll = bytes("KERNEL32.DLL\x00".encode("utf-16-le"))
     api = b"WinExec\x00"
+
+    if PY3 and isinstance(exe, str):
+        exe = bytes(exe.encode())
+
     WinExec64_sc = x64.MultipleInstr()
     WinExec64_sc += shellcraft.amd64.pushstr(dll)
     WinExec64_sc += x64.Mov("RCX", "RSP")
@@ -859,6 +960,10 @@ def sc_64_WinExec(exe):
 def sc_64_LoadLibrary(dll_path):
     dll = bytes("KERNEL32.DLL\x00".encode("utf-16-le"))
     api = b"LoadLibraryA\x00"
+
+    if PY3 and isinstance(dll_path, str):
+        dll_path = bytes(dll_path.encode())
+    
     LoadLibrary64_sc = x64.MultipleInstr()
 
     LoadLibrary64_sc += shellcraft.amd64.pushstr(dll)

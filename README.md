@@ -4,6 +4,8 @@ PWiNTOOLS is a very basic implementation of [pwntools][PWNTOOLS] for Windows to 
 
 Windows is not yet supported in the official [pwntools][PWNTOOLS]: [Minimal support for Windows #996](https://github.com/Gallopsled/pwntools/pull/996).
 
+PWiNTOOLS supports both Python 2 and 3.
+
 Feel free to contribute or report bugs.
 
 # Usage / Documentation
