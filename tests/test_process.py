@@ -3,10 +3,16 @@ import os.path
 sys.path.append(os.path.abspath(__file__ + "\..\.."))
 from pwintools import *
 
-log.log_level = 'error'
+log.log_level = 'warning'
 
 # Simple process spawn and exit
 cmd = Process(r"C:\Windows\System32\cmd.exe")
+assert(cmd.check_initialized())
+cmd.close()
+assert(cmd.is_exit)
+
+# Simple process with bytes type name
+cmd = Process(b"C:\\Windows\\System32\\cmd.exe")
 assert(cmd.check_initialized())
 cmd.close()
 assert(cmd.is_exit)
@@ -30,11 +36,10 @@ cmd.close()
 
 pwn = Process('pwn.exe')
 assert(pwn.leak(0x402000, 7) == b'Welcome')
-assert(pwn.search('cmd.exe') != 0)
+assert(pwn.search(b'cmd.exe') != 0)
 
 WinExecPwn = pwn.get_import('kernel32.dll', 'WinExec')
 assert(WinExecPwn == pwn.imports['kernel32.dll']['WinExec'].addr)
-assert(WinExecPwn == 0x403040)
 
 WinExecK32 = pwn.symbols['kernel32.dll']['WinExec']
 assert(WinExecK32 == pwn.imports['kernel32.dll']['WinExec'].value)

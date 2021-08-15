@@ -27,7 +27,7 @@ def test_shellcode_winexec():
     notepads = [p for p in windows.system.processes if p.name == "notepad.exe"]
     for proc in notepads:
         try:
-            if pattern in p.peb.commandline.str.encode('utf-16be').replace(b'\0', b''):
+            if pattern in proc.peb.commandline.str.encode('utf-16be').replace(b'\0', b''):
                 notepad_child_spawned = proc
         except windows.winproxy.error.WinproxyError:
             pass
