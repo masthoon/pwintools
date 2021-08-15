@@ -10,6 +10,7 @@ import socket
 import logging
 import threading
 
+from windows import *
 import windows
 import windows.winobject
 import windows.winproxy
@@ -17,11 +18,7 @@ import windows.native_exec.nativeutils
 import windows.generated_def as gdef
 from windows.generated_def.winstructs import *
 import windows.native_exec.simple_x64 as x64
-
-if sys.version_info[0] == 3:
-    xrange = range
-    print("Python 3 is not supported")
-
+import windows.debug
 
 try:
     import capstone
@@ -53,7 +50,7 @@ alpha_upper = string.ascii_uppercase
 digits = string.digits
 all_chars = string.ascii_letters+string.digits+' '+string.punctuation
 printable = string.printable
-all256 = ''.join([chr(i) for i in xrange(256)])
+all256 = ''.join([chr(i) for i in range(256)])
 
 class DotDict(dict):
     """Allow access to dict elements using dot"""
@@ -155,7 +152,7 @@ def hexdump(src, length=16):
     """
     FILTER = ''.join([(len(repr(chr(x))) == 3) and chr(x) or '.' for x in range(256)])
     lines = []
-    for c in xrange(0, len(src), length):
+    for c in range(0, len(src), length):
         chars = src[c:c+length]
         hex = ' '.join(["%02x" % ord(x) for x in chars])
         printable = ''.join(["%s" % ((ord(x) <= 127 and FILTER[ord(x)]) or '.') for x in chars])
@@ -312,17 +309,17 @@ def interact(obj, escape = False):
     go.clear()
     def recv_thread():
         while not go.is_set():
-            cur = obj.recvall(timeout = 200)
+            cur = str(obj.recvall(timeout = 200))
             cur = cur.replace('\r\n', '\n')
             if escape:
                 cur = cur.encode('string-escape')
-                cur = cur.replace('\\n', '\n')
-                cur = cur.replace('\\t', '\t')
-                cur = cur.replace('\\\\', '\\')
+                cur = cur.replace('\\n', '\n')#check bytes
+                cur = cur.replace('\\t', '\t')#check bytes
+                cur = cur.replace('\\\\', '\\')#check bytes
             if cur:
-                sys.stdout.write(cur)
-                if escape and not cur.endswith('\n'):
-                    sys.stdout.write('\n')
+                sys.stdout.buffer.write(bytes(cur.encode()))
+                if escape and not cur.endswith(b'\n'):
+                    sys.stdout.buffer.write(b'\n')
                 sys.stdout.flush()
             go.wait(0.2)
 
@@ -351,7 +348,8 @@ def interact(obj, escape = False):
 
 class Pipe(object):
     """Windows pipe support"""
-    def __init__(self, bInheritHandle = 1):
+
+    def __init__(self, bInheritHandle=1):
         attr = SECURITY_ATTRIBUTES()
         attr.lpSecurityDescriptor = 0
         attr.bInheritHandle = bInheritHandle
@@ -368,25 +366,28 @@ class Pipe(object):
         if mode and mode[0] == 'w':
             return self._wpipe
         return self._rpipe
-        
+
     def __del__(self):
-        windows.winproxy.CloseHandle(self._rpipe)
-        windows.winproxy.CloseHandle(self._wpipe)
+        if windows != None:
+            windows.winproxy.CloseHandle(self._rpipe)
+            windows.winproxy.CloseHandle(self._wpipe)
+        else:
+            pass
     
     def number_of_clients(self):
         return max(self._rh.infos.HandleCount, self._wh.infos.HandleCount)
-    
+
     def select(self):
         """select() returns the number of bytes available to read on the pipe"""
         return PeekNamedPipe(self._rpipe)
-        
+
     def _read(self, size):
         if size == 0:
-            return ''
+            return b""
         buffer = ctypes.create_string_buffer(size)
         windows.winproxy.ReadFile(self._rpipe, buffer)
         return buffer.raw
-        
+
     def read(self, size):
         """read(size) returns the bytes read on the pipe (returned length <= size)"""
         if self.select() < size:
@@ -395,7 +396,7 @@ class Pipe(object):
                 time.sleep(float(self.tick) / 1000)
                 elapsed += self.tick
         return self._read(min(self.select(), size))
-    
+
     def write(self, buffer):
         """write(buffer) sends the buffer on the pipe"""
         windows.winproxy.WriteFile(self._wpipe, buffer)
@@ -418,7 +419,7 @@ class Remote(object):
             log.error("EOFError: Socket {:s} connection failed".format(self))
             
         self._closed = False
-        self.newline = '\n'
+        self.newline = b"\n"
     
     def __repr__(self):
         return '<{0} "{1}:{2}" at {3}>'.format(self.__class__.__name__, self.ip, self.port, hex(id(self)))
@@ -469,7 +470,12 @@ class Remote(object):
         """write(buf) sends the buf to the socket"""
         if not self.check_closed(True):
             try:
-                return self.sock.send(buf)
+                if type(buf) == str:
+                    return self.sock.send(bytes(buf.encode()))
+                elif type(buf) == bytes:
+                    return self.sock.send(buf)
+                else:
+                    print("error")
             except socket.error:
                 self._closed = True
                 log.warning("EOFError: Socket {:s} closed".format(self))
@@ -499,7 +505,7 @@ class Remote(object):
         
     def recvuntil(self, delim, drop = False, timeout = None):
         """recvuntil(delim, drop = False, timeout = None) reads bytes until the delim is present on the socket before timeout"""
-        buf = ''
+        buf = b""
         while delim not in buf:
             buf += self.recvn(1, timeout)
         return buf if not drop else buf[:-len(delim)]
@@ -520,7 +526,9 @@ class Remote(object):
         t.sock = fs
         t.interact()
 
-class Process(windows.winobject.process.WinProcess):
+
+
+class Process(windows.winobject.process.WinProcess, windows.debug.Debugger):
     """
         Wrapper for Windows process
             Process(r"C:\Windows\system32\mspaint.exe")
@@ -532,7 +540,7 @@ class Process(windows.winobject.process.WinProcess):
         self.flags = flags
         self.stdhandles = not nostdhandles
         self.debuggerpath = r'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\windbg.exe'
-        self.newline = '\n'
+        self.newline = b"\n"
         self.__imports = None
         self.__symbols = None
         self.__libs = None
@@ -544,11 +552,11 @@ class Process(windows.winobject.process.WinProcess):
             # stderr mixed with stdout self.stderr = Pipe()
             self.timeout = 500 # ms
             self._default_timeout = 500 # ms
-        
+
         if self._create_process() != 0:
             raise(ValueError("CreateProcess failed - Invalid arguments"))
-        super(Process, self).__init__(pid=self.__pid, handle=self.__phandle)
-        if not (flags & CREATE_SUSPENDED):
+        super().__init__(pid=self.mypid, handle=self.myphandle)
+        if flags != CREATE_SUSPENDED:
             self.wait_initialized()
     
     def check_initialized(self):
@@ -556,20 +564,26 @@ class Process(windows.winobject.process.WinProcess):
         try: # Accessing PEB
             self.peb.modules[1]
             is_init = True
-        except:
+        except Exception as e:
+            log.info(e)
             pass
         if not is_init:
-            log.info("Process {:s} not initialized ...".format(self))
+            log.info("Process {0} not initialized ...".format(self))
         return is_init
     
     def wait_initialized(self):
+
         while not self.check_initialized():
-            time.sleep(0.05)
+            print(GetLastError())
+            time.sleep(0.50)
                 
     def __del__(self):
-        # TODO: Kill the debugger too
-        if self.__pid and not self.is_exit:
+        pass
+        """"# TODO: Kill the debugger too
+        if self.__pid:  # and not self.is_exit():
             self.exit(0)
+        # os.close(self.stdin)
+        # os.close(self.stdout)"""
     
     def _create_process(self):
         proc_info = PROCESS_INFORMATION()
@@ -584,27 +598,29 @@ class Process(windows.winobject.process.WinProcess):
         lpStartupInfo = ctypes.byref(StartupInfo)
         lpCommandLine = None
         lpApplicationName = self.cmd
+
+
         if isinstance(self.cmd, (list,)):
-            lpCommandLine = (" ".join([str(a) for a in self.cmd]))
+            lpCommandLine = (b" ".join([bytes(a) for a in self.cmd]))
             lpApplicationName = None
         try:
             windows.winproxy.CreateProcessA(lpApplicationName, lpCommandLine=lpCommandLine, bInheritHandles=True, dwCreationFlags=self.flags, lpProcessInformation=ctypes.byref(proc_info), lpStartupInfo=lpStartupInfo)
             windows.winproxy.CloseHandle(proc_info.hThread)
-            self.__pid = proc_info.dwProcessId
-            self.__phandle = proc_info.hProcess
-        except Exception:
+            self.mypid = proc_info.dwProcessId
+            self.myphandle = proc_info.hProcess
+        except Exception as exception:
             self.__pid = None
             self.__phandle = None
-            log.warning("Process {:s} failed to start!".format(self.cmd))
+            log.warning("Exception {0}: Process {1} failed to start!".format(exception, self.cmd))
             return -1
         return 0
     
     def check_exit(self, raise_exc=False):
         if self.is_exit:
             if raise_exc:
-                raise(EOFError("Process {:s} exited".format(self)))
+                raise(EOFError("Process {0} exited".format(self)))
             else:
-                log.warning("EOFError: Process {:s} exited".format(self))
+                log.warning("EOFError: Process {0} exited".format(self))
     
     def check_closed(self, raise_exc=False):
         if self.stdhandles and self.client_count() < 2:
@@ -630,13 +646,14 @@ class Process(windows.winobject.process.WinProcess):
         return -1
 
     def set_timeout(self, timeout):
-        if timeout:
+        pass
+        """if timeout:
             self._timeout = timeout
             if self.stdhandles:
                 self.stdin.timeout = timeout
                 self.stdout.timeout = timeout
         elif self._timeout != self._default_timeout:
-            self.timeout = self._default_timeout
+            self.timeout = self._default_timeout"""
 
     timeout = property(get_timeout, set_timeout)
     """timeout in ms for read on the process stdout (pipe)"""
@@ -645,8 +662,9 @@ class Process(windows.winobject.process.WinProcess):
         """read(n, timeout = None, no_warning = False) tries to read n bytes on process stdout before timeout"""
         if timeout:
             self.timeout = timeout
-        buf = ''
-        if self.stdhandles: # allow reading a closed end
+
+        buf = b''
+        if self.stdhandles:
             buf = self.stdout.read(n)
             if not no_warning and len(buf) != n:
                 log.warning("EOFError: Timeout {:s} - Incomplete read".format(self))
@@ -668,14 +686,14 @@ class Process(windows.winobject.process.WinProcess):
         
     def recv(self, n, timeout = None):
         """recv(n, timeout = None) tries to read n bytes on the process stdout before timeout"""
-        return self.read(n, timeout)
+        return bytes(self.read(n, timeout))
     
     def recvn(self, n, timeout = None):
         """recvn(n, timeout = None) reads exactly n bytes on the process stdout before timeout"""
         buf = self.read(n, timeout)
         if len(buf) != n:
             raise(EOFError("Timeout {:s} - Incomplete read".format(self)))
-        return buf
+        return bytes(buf)
     
     def recvall(self, force_exception = False, timeout = None):
         """recvall(force_exception = False, timeout = None) reads all bytes available on the process stdout before timeout"""
@@ -683,7 +701,7 @@ class Process(windows.winobject.process.WinProcess):
         
     def recvuntil(self, delim, drop = False, timeout = None):
         """recvuntil(delim, drop = False, timeout = None) reads bytes until the delim is present on the process stdout before timeout"""
-        buf = ''
+        buf = b''
         while delim not in buf:
             buf += self.recvn(1, timeout)
         return buf if not drop else buf[:-len(delim)]
@@ -715,7 +733,7 @@ class Process(windows.winobject.process.WinProcess):
                 for section in module.pe.sections:
                     if writable and section.Characteristics & gdef.IMAGE_SCN_MEM_WRITE == 0:
                         continue
-                    for page in xrange(section.start, section.start + section.size, 0x1000):
+                    for page in range(section.start, section.start + section.size, 0x1000):
                         try:
                             pos = self.read_memory(page, min(0x1000, (section.start + section.size) - page)).find(pattern)
                             if pos != -1:
@@ -730,7 +748,9 @@ class Process(windows.winobject.process.WinProcess):
     def imports(self):
         """imports returns a dict of main EXE imports like {'ntdll.dll': {'Sleep': <IATEntry type - .addr .value>, ...}, ...}"""
         if not self.check_initialized():
-            return {}
+            raise Exception("Error: PEB not initialized while getting the imports")
+            pass
+
         pe = self.peb.modules[0].pe
         if not self.__imports:
             pe = self.peb.modules[0].pe
@@ -740,14 +760,17 @@ class Process(windows.winobject.process.WinProcess):
     
     def get_import(self, dll, function):
         """get_import(self, dll, function) returns the address of the import dll!function"""
-        if not self.check_initialized():
-            return 0
+        if self.check_initialized() == False:
+            raise Exception("Error: PEB not initialized while getting the imports")
+            pass
+
         pe = self.peb.modules[0].pe
         if dll in pe.imports:
             for imp in pe.imports[dll]:
                 if imp.name == function:
                     return imp.addr
-        return 0
+
+        raise Exception("Error: dll ({0}) or function({1}) not found".format(dll, function))
         
     @property
     def symbols(self):
@@ -799,89 +822,87 @@ class Process(windows.winobject.process.WinProcess):
 # https://github.com/hakril/PythonForWindows/blob/master/samples/native_utils.py
 
 def sc_64_pushstr(s):
-    if not s.endswith('\0'):
-        s += '\0\0'
+    if not s.endswith(b"\0"):
+        s += b"\0\0"
     PushStr_sc = x64.MultipleInstr()
     # TODO: Use xor_pair to avoid NULL
     for block in cut(s, 8)[::-1]:
-        block += '\0' * (8 - len(block))
+        block += b"\0" * (8 - len(block))
         PushStr_sc += x64.Mov("RAX", u64(block))
         PushStr_sc += x64.Push("RAX")
     return PushStr_sc
 
 def sc_64_WinExec(exe):
-    dll = "KERNEL32.DLL\x00".encode("utf-16-le")
-    api = "WinExec\x00"
+    dll = bytes("KERNEL32.DLL\x00".encode("utf-16-le"))
+    api = b"WinExec\x00"
     WinExec64_sc = x64.MultipleInstr()
-    map(WinExec64_sc.__iadd__, [
-        shellcraft.amd64.pushstr(dll),
-        x64.Mov("RCX", "RSP"),
-        shellcraft.amd64.pushstr(api),
-        x64.Mov("RDX", "RSP"),
-        x64.Call(":FUNC_GETPROCADDRESS64"),
-        x64.Mov("R10", "RAX"),
-        shellcraft.amd64.pushstr(exe),
-        x64.Mov("RCX", "RSP"),
-        x64.Sub("RSP", 0x30),
-        x64.And("RSP", -32),
-        x64.Call("R10"),
-        x64.Label(":HERE"),
-        x64.Jmp(":HERE"), # Dirty infinite loop
-        # x64.Ret(),
-        windows.native_exec.nativeutils.GetProcAddress64,
-    ])
+    WinExec64_sc += shellcraft.amd64.pushstr(dll)
+    WinExec64_sc += x64.Mov("RCX", "RSP")
+    WinExec64_sc += shellcraft.amd64.pushstr(api)
+    WinExec64_sc += x64.Mov("RDX", "RSP")
+    WinExec64_sc += x64.Call(":FUNC_GETPROCADDRESS64")
+    WinExec64_sc += x64.Mov("R10", "RAX")
+    WinExec64_sc += shellcraft.amd64.pushstr(exe)
+    WinExec64_sc += x64.Mov("RCX", "RSP")
+    WinExec64_sc += x64.Sub("RSP", 0x30)
+    WinExec64_sc += x64.And("RSP", -32)
+    WinExec64_sc += x64.Call("R10")
+    WinExec64_sc += x64.Label(":HERE")
+    WinExec64_sc += x64.Jmp(":HERE")
+    WinExec64_sc += windows.native_exec.nativeutils.GetProcAddress64# Dirty infinite loop
+    #WinExec64_sc +=# x64.Ret(),
+
     return WinExec64_sc.get_code()
 
 
 
 def sc_64_LoadLibrary(dll_path):
-    dll = "KERNEL32.DLL\x00".encode("utf-16-le")
-    api = "LoadLibraryA\x00"
+    dll = bytes("KERNEL32.DLL\x00".encode("utf-16-le"))
+    api = b"LoadLibraryA\x00"
     LoadLibrary64_sc = x64.MultipleInstr()
-    map(LoadLibrary64_sc.__iadd__, [
-        shellcraft.amd64.pushstr(dll),
-        x64.Mov("RCX", "RSP"),
-        shellcraft.amd64.pushstr(api),
-        x64.Mov("RDX", "RSP"),
-        x64.Call(":FUNC_GETPROCADDRESS64"),
-        x64.Mov("R10", "RAX"),
-        shellcraft.amd64.pushstr(dll_path),
-        x64.Mov("RCX", "RSP"),
-        x64.Sub("RSP", 0x30),
-        x64.And("RSP", -32),
-        x64.Call("R10"),
-        x64.Label(":HERE"),
-        x64.Jmp(":HERE"), # Dirty infinite loop
-        # x64.Ret(),
-        windows.native_exec.nativeutils.GetProcAddress64,
-    ])
+
+    LoadLibrary64_sc += shellcraft.amd64.pushstr(dll)
+    LoadLibrary64_sc += x64.Mov("RCX", "RSP")
+    LoadLibrary64_sc += shellcraft.amd64.pushstr(api)
+    LoadLibrary64_sc += x64.Mov("RDX", "RSP")
+    LoadLibrary64_sc += x64.Call(":FUNC_GETPROCADDRESS64")
+    LoadLibrary64_sc += x64.Mov("R10", "RAX")
+    LoadLibrary64_sc += shellcraft.amd64.pushstr(dll_path)
+    LoadLibrary64_sc += x64.Mov("RCX", "RSP")
+    LoadLibrary64_sc += x64.Sub("RSP", 0x30)
+    LoadLibrary64_sc += x64.And("RSP", -32)
+    LoadLibrary64_sc += x64.Call("R10")
+    LoadLibrary64_sc += x64.Label(":HERE")
+    LoadLibrary64_sc += x64.Jmp(":HERE")
+    LoadLibrary64_sc += windows.native_exec.nativeutils.GetProcAddress64
+
     return LoadLibrary64_sc.get_code()
 
 
 def sc_64_AllocRWX(address, rwx_qword):
     dll = "KERNEL32.DLL\x00".encode("utf-16-le")
-    api = "VirtualAlloc\x00"
+    api = b"VirtualAlloc\x00"
     AllocRWX64_sc = x64.MultipleInstr()
-    map(AllocRWX64_sc.__iadd__, [
-        shellcraft.amd64.pushstr(dll),
-        x64.Mov("RCX", "RSP"),
-        shellcraft.amd64.pushstr(api),
-        x64.Mov("RDX", "RSP"),
-        x64.Call(":FUNC_GETPROCADDRESS64"),
-        x64.Mov("R10", "RAX"),
-        x64.Mov("RCX", address),
-        x64.Mov("RDX", 0x1000),
-        x64.Mov("R8", MEM_COMMIT | MEM_RESERVE),
-        x64.Mov("R9", PAGE_EXECUTE_READWRITE),
-        x64.Sub("RSP", 0x30),
-        x64.And("RSP", -32),
-        x64.Call("R10"),
-        x64.Mov('RAX', rwx_qword),
-        x64.Mov("RCX", address),
-        x64.Mov(x64.mem('[RCX]'), 'RAX'),
-        x64.Call("RCX"),
-        windows.native_exec.nativeutils.GetProcAddress64,
-    ])
+
+    AllocRWX64_sc += shellcraft.amd64.pushstr(dll)
+    AllocRWX64_sc += x64.Mov("RCX", "RSP")
+    AllocRWX64_sc += shellcraft.amd64.pushstr(api)
+    AllocRWX64_sc += x64.Mov("RDX", "RSP")
+    AllocRWX64_sc += x64.Call(":FUNC_GETPROCADDRESS64")
+    AllocRWX64_sc += x64.Mov("R10", "RAX")
+    AllocRWX64_sc += x64.Mov("RCX", address)
+    AllocRWX64_sc += x64.Mov("RDX", 0x1000)
+    AllocRWX64_sc += x64.Mov("R8", MEM_COMMIT | MEM_RESERVE)
+    AllocRWX64_sc += x64.Mov("R9", PAGE_EXECUTE_READWRITE)
+    AllocRWX64_sc += x64.Sub("RSP", 0x30)
+    AllocRWX64_sc += x64.And("RSP", -32)
+    AllocRWX64_sc += x64.Call("R10")
+    AllocRWX64_sc += x64.Mov('RAX', rwx_qword)
+    AllocRWX64_sc += x64.Mov("RCX", address)
+    AllocRWX64_sc += x64.Mov(x64.mem('[RCX]'), 'RAX')
+    AllocRWX64_sc += x64.Call("RCX")
+    AllocRWX64_sc += windows.native_exec.nativeutils.GetProcAddress64
+
     return AllocRWX64_sc.get_code()
 
 

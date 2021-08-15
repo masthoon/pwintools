@@ -6,7 +6,7 @@ from pwintools import *
 log.log_level = 'error'
 
 # Run pwn.exe
-proc = Process("pwn.exe")
+proc = Process([b"pwn.exe"])
 log.info(proc)
 
 # Search in memory cmd.exe
@@ -21,6 +21,7 @@ WinExec = proc.get_proc_address('kernel32.dll', 'WinExec')   # Faster than proc.
 log.info("kernel32!WinExec @ 0x{:x}".format(WinExec))
 
 # Tests
+
 log.debug(proc.recvline())
 log.debug(proc.recvline())
 

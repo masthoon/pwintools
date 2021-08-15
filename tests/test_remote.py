@@ -9,10 +9,10 @@ escape = len(sys.argv) > 1
 r = Remote('127.0.0.1', 8888)
 log.info(r)
 # Send 'PING' and waits for 'PONG' and detect connection closed
-r.sendline('PING')
+r.sendline(b'PING')
 buf = r.recvall()
 assert(buf == b'PONG')
-r.write('OK' + '\n')
+r.write(b'OK' + b'\n')
 
 assert(r.recvuntil(b':') == b'Non-ASCII stuff:')
 assert(r.recvn(2) == b'\x04\x08')
