@@ -30,7 +30,12 @@ assert(notepad.is_exit)
 cmd = Process(r"C:\Windows\System32\cmd.exe")
 notepad = Process(r"C:\Windows\system32\notepad.exe", CREATE_SUSPENDED)
 assert("combase.dll" in cmd.libs)
-assert(notepad.libs == {})
+try:
+    notepad.libs
+    assert(0)
+except Exception as e:
+    assert("PEB not initialized" in str(e))
+
 notepad.close()
 cmd.close()
 
