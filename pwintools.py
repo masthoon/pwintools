@@ -670,7 +670,7 @@ class Process(windows.winobject.process.WinProcess):
         return is_init
     
     def wait_initialized(self):
-        while not self.check_initialized():
+        while not self.check_initialized() and not self.is_exit:
             time.sleep(0.05)
                 
     def __del__(self):
