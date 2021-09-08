@@ -24,7 +24,6 @@ import windows.native_exec.simple_x64 as x64
 PY3 = False
 if sys.version_info[0] == 3:
     PY3 = True
-    xrange = range
     # Windows \r\n to \n on Python 3
     def newline_compat(func, *args, **kwargs):
         def wrapper(*args, **kwargs):
@@ -34,6 +33,8 @@ if sys.version_info[0] == 3:
             return result
         return wrapper
     sys.stdin.buffer.readline = newline_compat(sys.stdin.buffer.readline)
+else:
+    range = xrange
 
 try:
     import capstone
@@ -66,7 +67,7 @@ digits = string.digits
 all_chars = string.ascii_letters+string.digits+' '+string.punctuation
 printable = string.printable
 b_printable = list(filter(lambda c: c not in [0x9, 0xa, 0xb, 0xc, 0xd], list(map(ord, string.printable))))
-all256 = ''.join([chr(i) for i in xrange(256)])
+all256 = ''.join([chr(i) for i in range(256)])
 
 class DotDict(dict):
     """Allow access to dict elements using dot"""
@@ -102,7 +103,7 @@ def xor_pair(data, avoid = '\x00\n'):
         >>> xor_pair("test")
         ('\\x01\\x01\\x01\\x01', 'udru')
     """
-    alphabet = list(chr(n) for n in xrange(256) if chr(n) not in avoid)
+    alphabet = list(chr(n) for n in range(256) if chr(n) not in avoid)
     res1 = ''
     res2 = ''
     for c1 in data:
@@ -135,7 +136,7 @@ def bruteforce(charset, min_len=1, max_len=8):
     Charsets: alpha, alpha_lower, alpha_upper, digits, printable, all256
     """
     import itertools
-    return itertools.chain.from_iterable((''.join(l) for l in itertools.product(charset, repeat=i)) for i in xrange(min_len, max_len + 1))
+    return itertools.chain.from_iterable((''.join(l) for l in itertools.product(charset, repeat=i)) for i in range(min_len, max_len + 1))
 
 def cut(s, n):
     """cut(s, n) -> list
@@ -144,7 +145,7 @@ def cut(s, n):
       >>> cut('020304', 2)
       ['02', '03', '04']
     """
-    return [s[i:i+n] for i in xrange(0, len(s), n)]
+    return [s[i:i+n] for i in range(0, len(s), n)]
 
 def ordlist(s):
     """ordlist(s) -> list
@@ -174,7 +175,7 @@ def randstr(length=8, charset=all_chars):
     """randstr(length=8, charset=all_chars) -> str
     Randomly select (length) chars from the charset.
     """
-    return ''.join(random.choice(charset) for _ in xrange(length))
+    return ''.join(random.choice(charset) for _ in range(length))
 
 def ordp(c):
     """
@@ -831,7 +832,7 @@ class Process(windows.winobject.process.WinProcess):
                 for section in module.pe.sections:
                     if writable and section.Characteristics & gdef.IMAGE_SCN_MEM_WRITE == 0:
                         continue
-                    for page in xrange(section.start, section.start + section.size, 0x1000):
+                    for page in range(section.start, section.start + section.size, 0x1000):
                         try:
                             pos = self.read_memory(page, min(0x1000, (section.start + section.size) - page)).find(pattern)
                             if pos != -1:
