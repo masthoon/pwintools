@@ -55,7 +55,8 @@ try:
         """asm(code, bitness = 64, vma = 0) assembles the assembly code at vma"""
         ks = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_64 if bitness == 64 else keystone.KS_MODE_32)
         encoding, count = ks.asm(code, vma)
-        return encoding
+        opcode = bytes(encoding)
+        return opcode
 except ImportError:
     def asm(code, bitness = 64, vma = 0):
         raise(NotImplementedError("Keystone module not found"))
