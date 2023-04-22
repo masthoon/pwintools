@@ -494,7 +494,7 @@ class Pipe(object):
             elif isinstance(buffer, (bytes, bytearray)):
                 b_buff = buffer
             else:
-                raise(NotImplementedError("Unsupported type of buffer {0} in Remote.write".format(type(buf))))
+                raise(NotImplementedError("Unsupported type of buffer {0} in Remote.write".format(type(buffer))))
         windows.winproxy.WriteFile(self._wpipe, b_buff)
 
 class Remote(object):
