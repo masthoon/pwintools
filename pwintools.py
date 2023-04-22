@@ -639,7 +639,7 @@ class Process(windows.winobject.process.WinProcess):
         self.cmd = cmdline
         self.flags = flags
         self.stdhandles = not nostdhandles
-        self.debuggerpath = r'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\windbg.exe'
+        self.debuggerpath = b'C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64\\windbg.exe'
         self.newline = b"\n"
         self.__imports = None
         self.__symbols = None
@@ -906,11 +906,11 @@ class Process(windows.winobject.process.WinProcess):
         
     def spawn_debugger(self, breakin = True, dbg_cmd = None):
         """spawn_debugger(breakin = True, dbg_cmd = None) spawns Windbg (self.debuggerpath) to debug the process"""
-        cmd = [self.debuggerpath, '-p', str(self.pid)]
+        cmd = [self.debuggerpath, b'-p', str(self.pid).encode()]
         if not breakin:
-            cmd.append('-g')
+            cmd.append(b'-g')
         if dbg_cmd:
-            cmd.append('-c')
+            cmd.append(b'-c')
             cmd.append(dbg_cmd)
         self.debugger = Process(cmd, nostdhandles=True)
         # Give time to the debugger
